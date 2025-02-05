@@ -1,9 +1,10 @@
 -- database.sql
-
+-- Drop the database if you want a completely fresh install.
+DROP DATABASE IF EXISTS flightlog;
 CREATE DATABASE IF NOT EXISTS flightlog;
 USE flightlog;
 
--- Users table: stores pilots/crew and their roles (with email)
+-- Table: users
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) UNIQUE NOT NULL,
@@ -14,7 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Aircraft table: list of aircraft details entered by admin
+-- Table: aircraft
 CREATE TABLE IF NOT EXISTS aircraft (
   id INT AUTO_INCREMENT PRIMARY KEY,
   registration VARCHAR(20) UNIQUE NOT NULL,
@@ -24,13 +25,15 @@ CREATE TABLE IF NOT EXISTS aircraft (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Flights table: each flight log record
+-- Table: flights
+-- Note: aircraft_id is now allowed to be NULL (to support manual entries),
+-- and we have added custom_aircraft_details to store manually entered aircraft info.
 CREATE TABLE IF NOT EXISTS flights (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   flight_date DATE NOT NULL,
-  aircraft_id INT,  -- allow NULL if the user enters custom details
-  custom_aircraft_details TEXT,  -- new column for custom aircraft details when "Other" is selected
+  aircraft_id INT NULL,
+  custom_aircraft_details TEXT,
   flight_from VARCHAR(50) NOT NULL,
   flight_to VARCHAR(50) NOT NULL,
   capacity ENUM('pilot','crew') NOT NULL,
@@ -43,13 +46,23 @@ CREATE TABLE IF NOT EXISTS flights (
   takeoffs INT DEFAULT 0,
   landings INT DEFAULT 0,
   notes TEXT,
-  flight_duration TIME,  -- calculated flight duration (H:i:s)
+  flight_duration TIME,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
-  -- Note: aircraft_id is left without a foreign key constraint here so that it can be NULL.
+  -- We are not enforcing a foreign key on aircraft_id since it can be NULL.
 );
 
--- Password reset tokens table
+-- Table: flight_breakdown
+-- This table stores a breakdown of the flight time by role.
+CREATE TABLE IF NOT EXISTS flight_breakdown (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  flight_id INT NOT NULL,
+  role VARCHAR(50) NOT NULL,
+  duration_minutes INT NOT NULL,
+  FOREIGN KEY (flight_id) REFERENCES flights(id)
+);
+
+-- Table: password_reset_tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
@@ -60,12 +73,12 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Audit trail table for tracking changes to flight records
+-- Table: audit_trail
 CREATE TABLE IF NOT EXISTS audit_trail (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   flight_id INT,
-  action VARCHAR(20) NOT NULL,  -- e.g., 'create', 'edit', 'delete'
+  action VARCHAR(20) NOT NULL,
   details TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
