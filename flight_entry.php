@@ -9,12 +9,10 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Set a default value if 'default_role' is not set in the session.
-$sessionDefaultRole = $_SESSION['default_role'] ?? 'pilot';
-
-// Prebuild the role options for the flight breakdown dropdown.
+// Prebuild the role options for the Flight Role Breakdown default row.
 $roleOptions = '';
-if ($sessionDefaultRole === 'crew') {
+if (isset($_SESSION['default_role']) && $_SESSION['default_role'] === 'crew') {
+    // For crew, default to "Crew"
     $roleOptions .= '<option value="Crew" selected>Crew</option>';
     $roleOptions .= '<option value="Day P1">Day P1</option>';
     $roleOptions .= '<option value="Day P2">Day P2</option>';
@@ -24,6 +22,7 @@ if ($sessionDefaultRole === 'crew') {
     $roleOptions .= '<option value="Night Pilot under training">Night Pilot under training</option>';
     $roleOptions .= '<option value="Simulator">Simulator</option>';
 } else {
+    // Otherwise, default to "Day P1"
     $roleOptions .= '<option value="Day P1" selected>Day P1</option>';
     $roleOptions .= '<option value="Day P2">Day P2</option>';
     $roleOptions .= '<option value="Day Pilot under training">Day Pilot under training</option>';
@@ -45,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $flight_date = $_POST['flight_date'];
 
         // Aircraft field.
+        // If the "Other" checkbox is checked, use manually entered values.
         if (isset($_POST['aircraft_other_checkbox'])) {
             $aircraft_id = null;
             $aircraft_type = trim($_POST['aircraft_type']);
@@ -146,12 +146,8 @@ include('header.php');
 <div class="flight-entry-container">
   <h2>Enter New Flight Record</h2>
   <?php 
-    foreach ($error as $msg) {
-        echo "<p class='error'>" . htmlspecialchars($msg) . "</p>";
-    }
-    foreach ($success as $msg) {
-        echo "<p class='success'>" . htmlspecialchars($msg) . "</p>";
-    }
+    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
+    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
   ?>
   <form method="post" action="flight_entry.php">
     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -249,18 +245,18 @@ include('header.php');
       
       <div class="form-group">
           <label for="rotors_start">Rotors Start Time:</label>
-          <input type="time" name="rotors_start" id="rotors_start" required oninput="updateDefaultDuration();">
+          <input type="time" name="rotors_start" id="rotors_start" required oninput="recalcBreakdown();">
       </div>
       
       <div class="form-group">
           <label for="rotors_stop">Rotors Stop Time:</label>
-          <input type="time" name="rotors_stop" id="rotors_stop" required oninput="updateDefaultDuration();">
+          <input type="time" name="rotors_stop" id="rotors_stop" required oninput="recalcBreakdown();">
       </div>
     </fieldset>
     
     <fieldset>
       <legend>Flight Role Breakdown</legend>
-      <p>Detail the breakdown of your flight time by role (in minutes):</p>
+      <p>Detail the breakdown of your flight time by role (in minutes). The first row is calculated automatically.</p>
       <table id="breakdownTable" class="breakdown-table">
         <thead>
           <tr>
@@ -272,33 +268,22 @@ include('header.php');
         <tbody>
           <tr>
             <td>
-              <select name="role[]">
-                <?php if ($sessionDefaultRole === 'crew'): ?>
-                  <option value="Crew" selected>Crew</option>
-                  <option value="Day P1">Day P1</option>
-                  <option value="Day P2">Day P2</option>
-                  <option value="Day Pilot under training">Day Pilot under training</option>
-                  <option value="Night P1">Night P1</option>
-                  <option value="Night P2">Night P2</option>
-                  <option value="Night Pilot under training">Night Pilot under training</option>
-                  <option value="Simulator">Simulator</option>
-                <?php else: ?>
-                  <option value="Day P1" selected>Day P1</option>
-                  <option value="Day P2">Day P2</option>
-                  <option value="Day Pilot under training">Day Pilot under training</option>
-                  <option value="Night P1">Night P1</option>
-                  <option value="Night P2">Night P2</option>
-                  <option value="Night Pilot under training">Night Pilot under training</option>
-                  <option value="Simulator">Simulator</option>
-                  <option value="Crew">Crew</option>
-                <?php endif; ?>
+              <!-- Set the default row's role based on session default (or "Day P1" if not crew) -->
+              <select name="role[]" id="defaultRoleSelect">
+                <?php
+                $defaultRole = ($_SESSION['default_role'] ?? 'pilot') === 'crew' ? "Crew" : "Day P1";
+                // We force the default row to be the default role.
+                echo '<option value="' . $defaultRole . '" selected>' . $defaultRole . '</option>';
+                ?>
               </select>
             </td>
             <td>
-              <input type="number" name="duration[]" id="defaultDuration" min="0" placeholder="Minutes" required>
+              <!-- This field is read-only because it is auto-calculated -->
+              <input type="number" name="duration[]" id="defaultDuration" min="0" placeholder="Minutes" readonly>
             </td>
             <td>
-              <button type="button" onclick="removeRow(this);">Remove</button>
+              <!-- No remove button for the default row -->
+              &nbsp;
             </td>
           </tr>
         </tbody>
@@ -312,9 +297,49 @@ include('header.php');
   </form>
 </div>
 
-<!-- Include jQuery from Google's CDN without integrity attribute -->
+<!-- Include jQuery from Google's CDN (without an integrity attribute) -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
+// Function to recalculate and update the default Flight Role Breakdown row.
+// The default row's duration is set to (total flight minutes - sum of additional rows).
+function recalcBreakdown() {
+    const rotorsStart = document.getElementById('rotors_start').value;
+    const rotorsStop = document.getElementById('rotors_stop').value;
+    if (!rotorsStart || !rotorsStop) return;
+    
+    let start = new Date("1970-01-01T" + rotorsStart + "Z");
+    let stop = new Date("1970-01-01T" + rotorsStop + "Z");
+    let totalMinutes = (stop - start) / 60000;
+    if (totalMinutes < 0) { totalMinutes += 1440; }
+    
+    const tbody = document.getElementById("breakdownTable").querySelector("tbody");
+    const rows = tbody.getElementsByTagName("tr");
+    let additionalMinutes = 0;
+    
+    // Sum all rows except the first one (which is auto-calculated)
+    for (let i = 1; i < rows.length; i++) {
+        const input = rows[i].querySelector("input[name='duration[]']");
+        if (input) {
+            additionalMinutes += parseInt(input.value) || 0;
+        }
+    }
+    
+    let defaultMinutes = totalMinutes - additionalMinutes;
+    if (defaultMinutes < 0) defaultMinutes = 0;
+    
+    // Update the default row's duration input.
+    document.getElementById('defaultDuration').value = defaultMinutes;
+}
+
+// When additional breakdown rows change, recalc the breakdown.
+$(document).on("change", "input[name='duration[]']", function() {
+    // If this input is not the default (first row), recalc.
+    if ($(this).closest("tr").index() > 0) {
+        recalcBreakdown();
+    }
+});
+
+// jQuery event bindings for toggling manual inputs.
 $(document).ready(function() {
   $("#aircraft_other_checkbox").change(function() {
     $("#aircraft_other_div").toggle(this.checked);
@@ -328,19 +353,8 @@ $(document).ready(function() {
     $("#to_other_div").toggle(this.checked);
   });
 });
-
-function updateDefaultDuration() {
-    const startTime = document.getElementById('rotors_start').value;
-    const stopTime = document.getElementById('rotors_stop').value;
-    if (startTime && stopTime) {
-        const start = new Date("1970-01-01T" + startTime + "Z");
-        const stop = new Date("1970-01-01T" + stopTime + "Z");
-        let diff = (stop - start) / 60000;
-        if (diff < 0) { diff += 1440; }
-        document.getElementById('defaultDuration').value = diff;
-    }
-}
-
+  
+// Function to add an additional breakdown row.
 function addRow() {
     const tbody = document.getElementById("breakdownTable").querySelector("tbody");
     const newRow = tbody.insertRow();
@@ -348,17 +362,23 @@ function addRow() {
     const cell2 = newRow.insertCell(1);
     const cell3 = newRow.insertCell(2);
     
+    // Create a dropdown for the role with the same options as before.
     let selectHTML = '<select name="role[]">';
     selectHTML += <?php echo json_encode($roleOptions); ?>;
     selectHTML += '</select>';
     cell1.innerHTML = selectHTML;
-    cell2.innerHTML = '<input type="number" name="duration[]" min="0" placeholder="Minutes" required>';
+    cell2.innerHTML = '<input type="number" name="duration[]" min="0" placeholder="Minutes">';
     cell3.innerHTML = '<button type="button" onclick="removeRow(this);">Remove</button>';
+    
+    // Recalculate breakdown when a new row is added.
+    recalcBreakdown();
 }
 
+// Function to remove a breakdown row.
 function removeRow(btn) {
     const row = btn.parentNode.parentNode;
     row.parentNode.removeChild(row);
+    recalcBreakdown();
 }
 </script>
 
