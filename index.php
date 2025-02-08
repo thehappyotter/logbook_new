@@ -72,7 +72,7 @@ if (isset($_SESSION['user_id'])) {
     echo "<h3 style='display:inline-block; margin:0;'>Your Flight Statistics (" . ucfirst($selected_range) . ")</h3> ";
     echo "<span id='toggleIcon' style='float:right;'>[-]</span>";
     echo "</div>";
-    echo "<div id='statsContent' style='border:1px solid #ccc; padding:15px; background:#eef;'>";
+    echo "<div id='statsContent' style='border:1px solid #ccc; padding:15px; background:#eef;'>";    
     echo "<p><strong>Total Flights:</strong> " . htmlspecialchars($stats['total_flights']) . "</p>";
     echo "<p><strong>Total Flight Time:</strong> " . htmlspecialchars($stats['total_flight_time'] ?: '00:00:00') . "</p>";
     echo "<p><strong>Total NVG Time:</strong> " . htmlspecialchars($totalNVGTime) . " minutes</p>";
@@ -139,9 +139,14 @@ if (isset($_SESSION['user_id'])) {
             echo "<td>" . htmlspecialchars($to) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
             echo "<td>";
-            echo "<a href='flight_view.php?id=" . $flight['id'] . "'>View Full Flight Data</a> | ";
-            echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
-            echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
+            // Use styled buttons (with class "btn") for all actions.
+            echo "<a class='btn' href='flight_view.php?id=" . htmlspecialchars($flight['id']) . "'>Full Details</a> ";
+            echo "<a class='btn' href='flight_edit.php?id=" . htmlspecialchars($flight['id']) . "'>Edit</a> ";
+            echo "<form method='post' action='flight_delete.php' style='display:inline;' onsubmit='return confirm(\"Are you sure?\");'>";
+            echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars(getCSRFToken()) . "'>";
+            echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
+            echo "<input class='btn' type='submit' value='Delete'>";
+            echo "</form>";
             echo "</td>";
             echo "</tr>";
         }
@@ -155,7 +160,7 @@ if (isset($_SESSION['user_id'])) {
                 $queryParams = $_GET;
                 $queryParams['page'] = $i;
                 $queryString = http_build_query($queryParams);
-                echo "<a href='index.php?$queryString'>$i</a> ";
+                echo "<a class='btn' href='index.php?$queryString'>$i</a> ";
             }
         }
     } else {
