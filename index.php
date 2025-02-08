@@ -14,7 +14,7 @@ if (isset($_SESSION['user_id'])) {
     }
     $selected_range = $_SESSION['stats_range'] ?? 'all';
 
-    // Build a date filter clause based on the selected range.
+    // Build a date filter clause.
     $date_filter = "";
     switch ($selected_range) {
         case 'last7':
@@ -32,7 +32,7 @@ if (isset($_SESSION['user_id'])) {
 
     // Pagination variables.
     $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-    $perPage = 10; // Records per page.
+    $perPage = 10;
     $offset = ($page - 1) * $perPage;
 
     // Calculate statistics.
@@ -81,7 +81,7 @@ if (isset($_SESSION['user_id'])) {
     echo "</div>";
     echo "</div>";
 
-    // Retrieve the user's flight records with pagination.
+    // Retrieve flight records with pagination.
     $stmt = $pdo->prepare("SELECT * FROM flights WHERE user_id = ? ORDER BY flight_date DESC LIMIT ? OFFSET ?");
     $stmt->bindValue(1, $_SESSION['user_id'], PDO::PARAM_INT);
     $stmt->bindValue(2, $perPage, PDO::PARAM_INT);
@@ -89,7 +89,7 @@ if (isset($_SESSION['user_id'])) {
     $stmt->execute();
     $flights = $stmt->fetchAll();
 
-    // Get the total number of records for pagination.
+    // Count total records.
     $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM flights WHERE user_id = ? $date_filter");
     $stmtCount->execute([$_SESSION['user_id']]);
     $totalResults = $stmtCount->fetchColumn();
@@ -108,7 +108,6 @@ if (isset($_SESSION['user_id'])) {
         foreach ($flights as $flight) {
             echo "<tr>";
             echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
-            // Aircraft: if an aircraft_id exists, look up the registration; otherwise, use custom details.
             if ($flight['aircraft_id'] !== null) {
                 $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
                 $stmt2->execute([$flight['aircraft_id']]);
@@ -118,7 +117,6 @@ if (isset($_SESSION['user_id'])) {
             } else {
                 echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
             }
-            // "From": if numeric, look up the base name; otherwise, display the value.
             $from = $flight['flight_from'];
             if (is_numeric($from)) {
                 $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -129,7 +127,6 @@ if (isset($_SESSION['user_id'])) {
                 }
             }
             echo "<td>" . htmlspecialchars($from) . "</td>";
-            // "To": if numeric, look up the base name; otherwise, display the value.
             $to = $flight['flight_to'];
             if (is_numeric($to)) {
                 $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -141,7 +138,6 @@ if (isset($_SESSION['user_id'])) {
             }
             echo "<td>" . htmlspecialchars($to) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
-            // Actions: include a "View Full Flight Data" link along with Edit and Delete.
             echo "<td>";
             echo "<a href='flight_view.php?id=" . $flight['id'] . "'>View Full Flight Data</a> | ";
             echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
@@ -150,7 +146,7 @@ if (isset($_SESSION['user_id'])) {
             echo "</tr>";
         }
         echo "</tbody></table>";
-
+      
         $totalPages = ceil($totalResults / $perPage);
         for ($i = 1; $i <= $totalPages; $i++) {
             if ($i == $page) {
@@ -165,6 +161,8 @@ if (isset($_SESSION['user_id'])) {
     } else {
         echo "<p>No flight records found. Start by adding a new flight.</p>";
     }
+    
+    echo "</main></div>"; // End wrapper and main.
 } else {
     echo "<div class='flight-entry-container'>";
     echo "<h2>Welcome to the Flight Log</h2>";

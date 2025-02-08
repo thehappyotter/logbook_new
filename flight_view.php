@@ -24,12 +24,12 @@ if (!$flight) {
     die("Flight record not found.");
 }
 
-// (Optional) Verify that the user is allowed to view this flight.
+// Ensure the user is authorized.
 if ($flight['user_id'] != $_SESSION['user_id'] && $_SESSION['role'] != 'admin') {
     die("Unauthorized access.");
 }
 
-// Retrieve aircraft details if applicable.
+// Retrieve aircraft details.
 $aircraftInfo = "";
 if ($flight['aircraft_id'] !== null) {
     $stmtA = $pdo->prepare("SELECT registration, type FROM aircraft WHERE id = ?");
@@ -42,7 +42,7 @@ if ($flight['aircraft_id'] !== null) {
     $aircraftInfo = htmlspecialchars($flight['custom_aircraft_details']);
 }
 
-// Retrieve base names for From and To if needed.
+// Function to get base name.
 function getBaseName($pdo, $value) {
     if (is_numeric($value)) {
         $stmtB = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -56,7 +56,7 @@ function getBaseName($pdo, $value) {
 }
 
 $fromName = getBaseName($pdo, $flight['flight_from']);
-$toName = getBaseName($pdo, $flight['flight_to']);
+$toName   = getBaseName($pdo, $flight['flight_to']);
 
 // Retrieve flight breakdown details.
 $stmtBreakdown = $pdo->prepare("SELECT role, duration_minutes FROM flight_breakdown WHERE flight_id = ?");
@@ -113,7 +113,7 @@ include('header.php');
     </tr>
   </table>
   
-  <!-- Flight Times / Breakdown Section -->
+  <!-- Flight Role Breakdown Section -->
   <h3>Flight Role Breakdown</h3>
   <?php if ($breakdowns): ?>
   <table>

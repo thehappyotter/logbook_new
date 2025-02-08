@@ -5,16 +5,17 @@
     box-sizing: border-box;
   }
   
-  /* Base body styles */
+  /* Base styles */
   body {
     font-family: Arial, sans-serif;
     background: #f5f5f5;
     line-height: 1.6;
   }
   
-  /* Container wrapper for the entire site */
+  /* Wrapper container */
   .wrapper {
-    max-width: 1200px;  /* Adjust this value for wider or narrower layouts */
+    max-width: 1800px;
+    width: 95%;
     margin: 0 auto;
     padding: 0 15px;
   }
@@ -29,22 +30,20 @@
     align-items: center;
     flex-wrap: wrap;
   }
-  
   header .main-menu a,
   header .user-menu a {
     color: #ffcc00;
     text-decoration: none;
     margin-right: 15px;
   }
-  
   header .user-menu span {
     margin-right: 15px;
   }
   
-  /* Main content area */
+  /* Main */
   main {
     padding: 20px;
-    margin-bottom: 60px; /* Leave space for the footer */
+    margin-bottom: 60px;
   }
   
   /* Footer */
@@ -53,7 +52,7 @@
     color: #ffcc00;
     text-align: center;
     padding: 10px 20px;
-    position: fixed;  /* For desktop; see media query for mobile adjustments */
+    position: fixed;
     width: 100%;
     bottom: 0;
   }
@@ -63,7 +62,6 @@
     color: red;
     margin-bottom: 10px;
   }
-  
   .success {
     color: green;
     margin-bottom: 10px;
@@ -75,11 +73,9 @@
     border-collapse: collapse;
     margin-bottom: 20px;
   }
-  
   table, th, td {
     border: 1px solid #ccc;
   }
-  
   th, td {
     padding: 10px;
     text-align: left;
@@ -90,7 +86,6 @@
     display: block;
     margin-top: 10px;
   }
-  
   form input[type="text"],
   form input[type="password"],
   form input[type="email"],
@@ -105,7 +100,6 @@
     border: 1px solid #ccc;
     border-radius: 3px;
   }
-  
   form input[type="submit"] {
     margin-top: 15px;
     padding: 10px 20px;
@@ -132,7 +126,6 @@
     padding: 10px;
     border-radius: 5px;
   }
-  
   fieldset legend {
     font-weight: bold;
     padding: 0 10px;
@@ -144,12 +137,10 @@
       flex-direction: column;
       align-items: flex-start;
     }
-    
     footer {
       position: static;
       margin-top: 20px;
     }
-    
     .wrapper {
       padding: 0 10px;
     }

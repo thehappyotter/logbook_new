@@ -9,7 +9,7 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Set the default date to today.
+// Set default date.
 $default_date = date('Y-m-d');
 
 // Retrieve the user's most recent flight to set the default aircraft.
@@ -22,11 +22,11 @@ $lastAircraftId = $lastFlight ? $lastFlight['aircraft_id'] : "";
 $stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
 $aircraft_list = $stmt->fetchAll();
 
-// Fetch bases from the database.
+// Fetch bases.
 $stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
 $bases = $stmtBases->fetchAll();
 
-// Re-query the current user's default_base and default_role from the database.
+// Re-query user's default_base and default_role.
 $stmtUser = $pdo->prepare("SELECT default_base, default_role FROM users WHERE id = ?");
 $stmtUser->execute([$_SESSION['user_id']]);
 $userData = $stmtUser->fetch();
@@ -36,10 +36,10 @@ if (!$default_base && count($bases) > 0) {
     $default_base = $bases[0]['id'];
 }
 
-// Determine the default role for the breakdown default row.
+// Determine default role for Flight Role Breakdown.
 $defaultRowRole = ($default_role === 'crew') ? "Crew" : "Day P1";
 
-// Build the complete set of role options for the dropdown.
+// Build role options.
 $roleOptions = '
 <option value="Day P1"' . ($defaultRowRole == "Day P1" ? ' selected' : '') . '>Day P1</option>
 <option value="Day P2"' . ($defaultRowRole == "Day P2" ? ' selected' : '') . '>Day P2</option>
@@ -91,9 +91,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $rotors_start = $_POST['rotors_start'];
         $rotors_stop = $_POST['rotors_stop'];
         
+        // Calculate flight duration—handle overnight flights by adding one day to the stop time if needed.
         try {
             $start = new DateTime($rotors_start);
-            $stop = new DateTime($rotors_stop);
+            $stop  = new DateTime($rotors_stop);
+            // If the stop time is earlier than or equal to the start time, assume the flight goes overnight.
+            if ($stop <= $start) {
+                $stop->modify('+1 day');
+            }
             $interval = $start->diff($stop);
             $flight_duration = $interval->format('%H:%I:%S');
         } catch (Exception $e) {
@@ -113,7 +118,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $npa = isset($_POST['npa']) ? intval($_POST['npa']) : 0;
         
         if (empty($error)) {
-            // Insert the flight record including the new NVG and Instrument Flight fields.
             $stmt = $pdo->prepare("INSERT INTO flights (user_id, flight_date, aircraft_id, custom_aircraft_details, flight_from, flight_to, capacity, pilot_type, crew_names, rotors_start, rotors_stop, flight_duration, nvg_time, nvg_takeoffs, nvg_landings, sim_if, act_if, ils_approaches, rnp, npa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $result = $stmt->execute([
                 $_SESSION['user_id'],
@@ -160,17 +164,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+include('header.php');
 ?>
-<?php include('header.php'); ?>
 <div class="flight-entry-container">
   <h2>Enter New Flight Record</h2>
   <?php 
-    foreach ($error as $msg) {
-        echo "<p class='error'>" . htmlspecialchars($msg) . "</p>";
-    }
-    foreach ($success as $msg) {
-        echo "<p class='success'>" . htmlspecialchars($msg) . "</p>";
-    }
+    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
+    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
   ?>
   <form method="post" action="flight_entry.php">
     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -307,45 +307,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <button type="button" onclick="addRow();">Add Role</button>
     </fieldset>
     
-    <!-- NVG Section -->
-    <fieldset>
-      <legend>NVG</legend>
-      <div class="form-group">
-          <label for="nvg_time">NVG Time (minutes):</label>
-          <input type="number" name="nvg_time" id="nvg_time" min="0" value="0">
-      </div>
-      <div class="form-group">
-          <label for="nvg_takeoffs">NVG Takeoffs:</label>
-          <input type="number" name="nvg_takeoffs" id="nvg_takeoffs" min="0" value="0">
-      </div>
-      <div class="form-group">
-          <label for="nvg_landings">NVG Landings:</label>
-          <input type="number" name="nvg_landings" id="nvg_landings" min="0" value="0">
+    <!-- NVG Section (Collapsible) -->
+    <fieldset class="collapsible" id="nvgFieldset">
+      <legend style="cursor: pointer;">NVG <span class="toggle-indicator">[+]</span></legend>
+      <div class="collapsible-content" style="display: none;">
+        <div class="form-group">
+            <label for="nvg_time">NVG Time (minutes):</label>
+            <input type="number" name="nvg_time" id="nvg_time" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="nvg_takeoffs">NVG Takeoffs:</label>
+            <input type="number" name="nvg_takeoffs" id="nvg_takeoffs" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="nvg_landings">NVG Landings:</label>
+            <input type="number" name="nvg_landings" id="nvg_landings" min="0" value="0">
+        </div>
       </div>
     </fieldset>
     
-    <!-- Instrument Flight Section -->
-    <fieldset>
-      <legend>Instrument Flight</legend>
-      <div class="form-group">
-          <label for="sim_if">Sim IF (time):</label>
-          <input type="time" name="sim_if" id="sim_if">
-      </div>
-      <div class="form-group">
-          <label for="act_if">Act IF (time):</label>
-          <input type="time" name="act_if" id="act_if">
-      </div>
-      <div class="form-group">
-          <label for="ils_approaches">ILS Approaches:</label>
-          <input type="number" name="ils_approaches" id="ils_approaches" min="0" value="0">
-      </div>
-      <div class="form-group">
-          <label for="rnp">RNP:</label>
-          <input type="number" name="rnp" id="rnp" min="0" value="0">
-      </div>
-      <div class="form-group">
-          <label for="npa">NPA:</label>
-          <input type="number" name="npa" id="npa" min="0" value="0">
+    <!-- Instrument Flight Section (Collapsible) -->
+    <fieldset class="collapsible" id="ifFieldset">
+      <legend style="cursor: pointer;">Instrument Flight <span class="toggle-indicator">[+]</span></legend>
+      <div class="collapsible-content" style="display: none;">
+        <div class="form-group">
+            <label for="sim_if">Sim IF (time):</label>
+            <input type="time" name="sim_if" id="sim_if">
+        </div>
+        <div class="form-group">
+            <label for="act_if">Act IF (time):</label>
+            <input type="time" name="act_if" id="act_if">
+        </div>
+        <div class="form-group">
+            <label for="ils_approaches">ILS Approaches:</label>
+            <input type="number" name="ils_approaches" id="ils_approaches" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="rnp">RNP:</label>
+            <input type="number" name="rnp" id="rnp" min="0" value="0">
+        </div>
+        <div class="form-group">
+            <label for="npa">NPA:</label>
+            <input type="number" name="npa" id="npa" min="0" value="0">
+        </div>
       </div>
     </fieldset>
     
@@ -355,9 +359,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </form>
 </div>
 
-<!-- Include jQuery from Google's CDN -->
+<!-- Include jQuery -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
+// Toggle functionality for checkboxes.
 $(document).ready(function(){
   $("#aircraft_other_checkbox").change(function(){
     $("#aircraft_other_div").toggle(this.checked);
@@ -367,6 +372,20 @@ $(document).ready(function(){
   });
   $("#to_other_checkbox").change(function(){
     $("#to_other_div").toggle(this.checked);
+  });
+  
+  // Collapsible fieldset functionality.
+  $(".collapsible legend").click(function(){
+    var $fieldset = $(this).parent();
+    var $content = $fieldset.find(".collapsible-content");
+    var $indicator = $(this).find(".toggle-indicator");
+    $content.slideToggle(200, function(){
+      if ($content.is(":visible")) {
+        $indicator.text("[-]");
+      } else {
+        $indicator.text("[+]");
+      }
+    });
   });
 });
 
@@ -397,7 +416,7 @@ function recalcBreakdown(){
     $("#defaultDuration").val(defaultMinutes);
 }
 
-// When an additional row's duration changes, recalc the breakdown.
+// When an additional row's duration changes, recalc.
 $(document).on("change", "input[name='duration[]']", function(){
     if($(this).closest("tr").index() > 0){
         recalcBreakdown();

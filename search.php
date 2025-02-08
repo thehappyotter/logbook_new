@@ -12,7 +12,7 @@ if (!isset($_SESSION['user_id'])) {
 $searchQuery = "";
 $start_date  = "";
 $end_date    = "";
-$sort = "flight_date DESC";  // Default sort order
+$sort = "flight_date DESC";
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $perPage = 10;
 $offset = ($page - 1) * $perPage;
@@ -43,24 +43,21 @@ if (isset($_GET['end_date']) && trim($_GET['end_date']) !== "") {
 
 $whereSQL = implode(" AND ", $whereClauses);
 
-// First, run a COUNT query to get the total number of matching records.
+// Count total results.
 $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM flights f JOIN aircraft a ON f.aircraft_id = a.id WHERE $whereSQL");
 $stmtCount->execute($params);
 $totalResults = $stmtCount->fetchColumn();
 
-// Next, retrieve the flight records with pagination.
-// Note: We need to append the LIMIT and OFFSET as additional parameters.
+// Retrieve flight records with pagination.
 $query = "SELECT f.*, a.registration FROM flights f JOIN aircraft a ON f.aircraft_id = a.id WHERE $whereSQL ORDER BY $sort LIMIT ? OFFSET ?";
 $stmt = $pdo->prepare($query);
 
-// Bind all the parameters from $params
 $paramIndex = 1;
 foreach ($params as $param) {
     $stmt->bindValue($paramIndex, $param);
     $paramIndex++;
 }
 
-// Bind the LIMIT and OFFSET parameters.
 $stmt->bindValue($paramIndex, $perPage, PDO::PARAM_INT);
 $paramIndex++;
 $stmt->bindValue($paramIndex, $offset, PDO::PARAM_INT);
@@ -113,7 +110,6 @@ include('header.php');
       foreach ($flights as $flight) {
           echo "<tr>";
           echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
-          // Aircraft: if aircraft_id exists, look up the registration; otherwise use custom details.
           if ($flight['aircraft_id'] !== null) {
               $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
               $stmt2->execute([$flight['aircraft_id']]);
@@ -123,7 +119,6 @@ include('header.php');
           } else {
               echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
           }
-          // For "From": if numeric, look up the base name; otherwise, display the stored value.
           $from = $flight['flight_from'];
           if (is_numeric($from)) {
               $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -134,7 +129,6 @@ include('header.php');
               }
           }
           echo "<td>" . htmlspecialchars($from) . "</td>";
-          // For "To": same logic as "From"
           $to = $flight['flight_to'];
           if (is_numeric($to)) {
               $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -155,10 +149,9 @@ include('header.php');
           echo "<td>" . htmlspecialchars($flight['rnp']) . "</td>";
           echo "<td>" . htmlspecialchars($flight['npa']) . "</td>";
           echo "<td>";
-          if ($flight['user_id'] == $_SESSION['user_id'] || $_SESSION['role'] == 'admin') {
-              echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
-              echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
-          }
+          echo "<a href='flight_view.php?id=" . $flight['id'] . "'>View Full Flight Data</a> | ";
+          echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
+          echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
           echo "</td>";
           echo "</tr>";
       }
