@@ -10,7 +10,7 @@ if (isset($_SESSION['user_id'])) {
     if (isset($_GET['stats_range'])) {
         $_SESSION['stats_range'] = $_GET['stats_range'];
     }
-    $selected_range = isset($_SESSION['stats_range']) ? $_SESSION['stats_range'] : 'all';
+    $selected_range = $_SESSION['stats_range'] ?? 'all';
 
     // Build a date filter clause based on the selected range.
     $date_filter = "";
@@ -24,28 +24,33 @@ if (isset($_SESSION['user_id'])) {
         case 'year':
             $date_filter = " AND YEAR(flight_date) = YEAR(CURDATE())";
             break;
-        case 'all':
         default:
             break;
     }
+
+    // Pagination variables
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+    $perPage = 10;  // records per page
+    $offset = ($page - 1) * $perPage;
 
     // Calculate statistics.
     $stmtStats = $pdo->prepare("
         SELECT 
           COUNT(*) AS total_flights, 
-          SEC_TO_TIME(SUM(TIME_TO_SEC(flight_duration))) AS total_flight_time, 
-          SUM(night_vision_duration) AS total_nvg_minutes 
+          SEC_TO_TIME(SUM(TIME_TO_SEC(flight_duration))) AS total_flight_time,
+          SUM(nvg_time) AS total_nvg_time,
+          SUM(nvg_takeoffs) AS total_nvg_takeoffs,
+          SUM(nvg_landings) AS total_nvg_landings
         FROM flights 
         WHERE user_id = ? $date_filter
     ");
     $stmtStats->execute([$_SESSION['user_id']]);
     $stats = $stmtStats->fetch();
 
-    $nvg_minutes = $stats['total_nvg_minutes'] ? $stats['total_nvg_minutes'] : 0;
-    $nvg_hours = floor($nvg_minutes / 60);
-    $nvg_remaining_minutes = $nvg_minutes % 60;
+    $totalNVGTime = $stats['total_nvg_time'] ? $stats['total_nvg_time'] : 0;
+    $totalNVGTakeoffs = $stats['total_nvg_takeoffs'] ? $stats['total_nvg_takeoffs'] : 0;
+    $totalNVGLandings = $stats['total_nvg_landings'] ? $stats['total_nvg_landings'] : 0;
 
-    // Output the statistics section.
     echo "<div class='flight-entry-container'>";
     echo "<form method='get' action='index.php' style='margin-bottom:20px;'>";
     echo "<div class='form-group'>";
@@ -60,22 +65,32 @@ if (isset($_SESSION['user_id'])) {
     echo "<div class='form-group'><input type='submit' value='Update'></div>";
     echo "</form>";
 
-    echo "<div id='statsContainer' style='margin-bottom: 20px;'>";
-    echo "<div id='statsHeader' style='cursor: pointer; background: #ccc; padding: 5px;'>";
-    echo "<h3 style='display: inline-block; margin: 0;'>Your Flight Statistics (" . ucfirst($selected_range) . ")</h3> ";
-    echo "<span id='toggleIcon' style='float: right;'>[-]</span>";
+    echo "<div id='statsContainer' style='margin-bottom:20px;'>";
+    echo "<div id='statsHeader' style='cursor:pointer; background:#ccc; padding:5px;'>";
+    echo "<h3 style='display:inline-block; margin:0;'>Your Flight Statistics (" . ucfirst($selected_range) . ")</h3> ";
+    echo "<span id='toggleIcon' style='float:right;'>[-]</span>";
     echo "</div>";
-    echo "<div id='statsContent' style='border: 1px solid #ccc; padding: 15px; background: #eef;'>";
+    echo "<div id='statsContent' style='border:1px solid #ccc; padding:15px; background:#eef;'>";
     echo "<p><strong>Total Flights:</strong> " . htmlspecialchars($stats['total_flights']) . "</p>";
     echo "<p><strong>Total Flight Time:</strong> " . htmlspecialchars($stats['total_flight_time'] ?: '00:00:00') . "</p>";
-    echo "<p><strong>Total NVG Time:</strong> " . $nvg_hours . " hours " . $nvg_remaining_minutes . " minutes</p>";
+    echo "<p><strong>Total NVG Time:</strong> " . htmlspecialchars($totalNVGTime) . " minutes</p>";
+    echo "<p><strong>Total NVG Takeoffs:</strong> " . htmlspecialchars($totalNVGTakeoffs) . "</p>";
+    echo "<p><strong>Total NVG Landings:</strong> " . htmlspecialchars($totalNVGLandings) . "</p>";
     echo "</div>";
     echo "</div>";
 
-    // Retrieve the user's flight records.
-    $stmt = $pdo->prepare("SELECT * FROM flights WHERE user_id = ? ORDER BY flight_date DESC");
-    $stmt->execute([$_SESSION['user_id']]);
+    // Retrieve the user's flight records with pagination.
+    $stmt = $pdo->prepare("SELECT * FROM flights WHERE user_id = ? ORDER BY flight_date DESC LIMIT ? OFFSET ?");
+    $stmt->bindValue(1, $_SESSION['user_id'], PDO::PARAM_INT);
+    $stmt->bindValue(2, $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(3, $offset, PDO::PARAM_INT);
+    $stmt->execute();
     $flights = $stmt->fetchAll();
+
+    // Get total number of records for pagination.
+    $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM flights WHERE user_id = ? $date_filter");
+    $stmtCount->execute([$_SESSION['user_id']]);
+    $totalResults = $stmtCount->fetchColumn();
 
     echo "<h2>Your Flight Log</h2>";
     if ($flights) {
@@ -86,13 +101,20 @@ if (isset($_SESSION['user_id'])) {
                 <th>From</th>
                 <th>To</th>
                 <th>Duration</th>
-                <th>Notes</th>
+                <th>NVG Time</th>
+                <th>NVG Takeoffs</th>
+                <th>NVG Landings</th>
+                <th>Sim IF</th>
+                <th>Act IF</th>
+                <th>ILS Approaches</th>
+                <th>RNP</th>
+                <th>NPA</th>
                 <th>Actions</th>
               </tr></thead><tbody>";
         foreach ($flights as $flight) {
             echo "<tr>";
             echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
-            // For Aircraft, display registration (or custom details)
+            // Aircraft: if aircraft_id exists, look up the registration; else use custom details.
             if ($flight['aircraft_id'] !== null) {
                 $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
                 $stmt2->execute([$flight['aircraft_id']]);
@@ -102,7 +124,7 @@ if (isset($_SESSION['user_id'])) {
             } else {
                 echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
             }
-            // For "From": if numeric, look up base_name; otherwise, display as is.
+            // From: if numeric, look up base name.
             $from = $flight['flight_from'];
             if (is_numeric($from)) {
                 $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -113,7 +135,7 @@ if (isset($_SESSION['user_id'])) {
                 }
             }
             echo "<td>" . htmlspecialchars($from) . "</td>";
-            // For "To": do the same as for "From"
+            // To: if numeric, look up base name.
             $to = $flight['flight_to'];
             if (is_numeric($to)) {
                 $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -125,7 +147,14 @@ if (isset($_SESSION['user_id'])) {
             }
             echo "<td>" . htmlspecialchars($to) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['notes']) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['nvg_time']) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['nvg_takeoffs']) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['nvg_landings']) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['sim_if']) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['act_if']) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['ils_approaches']) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['rnp']) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['npa']) . "</td>";
             echo "<td>";
             if ($flight['user_id'] == $_SESSION['user_id'] || $_SESSION['role'] == 'admin') {
                 echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
@@ -135,12 +164,22 @@ if (isset($_SESSION['user_id'])) {
             echo "</tr>";
         }
         echo "</tbody></table>";
+      
+        $totalPages = ceil($totalResults / $perPage);
+        for ($i = 1; $i <= $totalPages; $i++) {
+            if ($i == $page) {
+                echo "<strong>$i</strong> ";
+            } else {
+                $queryParams = $_GET;
+                $queryParams['page'] = $i;
+                $queryString = http_build_query($queryParams);
+                echo "<a href='index.php?$queryString'>$i</a> ";
+            }
+        }
     } else {
         echo "<p>No flight records found. Start by adding a new flight.</p>";
     }
-    echo "</div>";
 } else {
-    // When the user is not logged in.
     echo "<div class='flight-entry-container'>";
     echo "<h2>Welcome to the Flight Log</h2>";
     echo "<p>Please <a href='login.php'>login</a> or <a href='register.php'>register</a> to view your flight records and statistics.</p>";
@@ -149,18 +188,17 @@ if (isset($_SESSION['user_id'])) {
 include('footer.php');
 ?>
 <script>
-document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function(){
     var statsContent = document.getElementById('statsContent');
     var toggleIcon = document.getElementById('toggleIcon');
-
-    if (statsContent && toggleIcon) {
+    if(statsContent && toggleIcon){
         var collapsed = localStorage.getItem('statsCollapsed');
-        if (collapsed === 'true') {
+        if(collapsed === 'true'){
             statsContent.style.display = 'none';
             toggleIcon.textContent = '[+]';
         }
-        document.getElementById('statsHeader').addEventListener('click', function() {
-            if (statsContent.style.display === 'none') {
+        document.getElementById('statsHeader').addEventListener('click', function(){
+            if(statsContent.style.display === 'none'){
                 statsContent.style.display = 'block';
                 toggleIcon.textContent = '[-]';
                 localStorage.setItem('statsCollapsed', 'false');

@@ -1,9 +1,9 @@
--- database.sql
+-- Drop the database if it already exists.
 DROP DATABASE IF EXISTS flightlog;
-CREATE DATABASE IF NOT EXISTS flightlog;
+CREATE DATABASE flightlog;
 USE flightlog;
 
--- Table: bases (organisation bases)
+-- Table: bases (Organization bases)
 CREATE TABLE IF NOT EXISTS bases (
   id INT AUTO_INCREMENT PRIMARY KEY,
   base_name VARCHAR(100) NOT NULL,
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS bases (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Table: users (with default_base referencing bases)
+-- Table: users
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) UNIQUE NOT NULL,
@@ -35,31 +35,37 @@ CREATE TABLE IF NOT EXISTS aircraft (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Table: flights  
+-- Table: flights
 CREATE TABLE IF NOT EXISTS flights (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
   flight_date DATE NOT NULL,
-  aircraft_id INT NULL,
-  custom_aircraft_details TEXT,
-  flight_from VARCHAR(50) NOT NULL,
-  flight_to VARCHAR(50) NOT NULL,
+  aircraft_id INT DEFAULT NULL,
+  custom_aircraft_details VARCHAR(255) DEFAULT NULL,
+  flight_from VARCHAR(100) NOT NULL,
+  flight_to VARCHAR(100) NOT NULL,
   capacity ENUM('pilot','crew') NOT NULL,
   pilot_type ENUM('single','multi') NOT NULL,
-  crew_names TEXT,
-  rotors_start TIME,
-  rotors_stop TIME,
-  night_vision BOOL DEFAULT 0,
-  night_vision_duration INT DEFAULT 0,
-  takeoffs INT DEFAULT 0,
-  landings INT DEFAULT 0,
-  notes TEXT,
-  flight_duration TIME,
+  crew_names VARCHAR(255) DEFAULT NULL,
+  rotors_start TIME NOT NULL,
+  rotors_stop TIME NOT NULL,
+  flight_duration TIME NOT NULL,
+  -- New NVG fields
+  nvg_time INT DEFAULT 0,
+  nvg_takeoffs INT DEFAULT 0,
+  nvg_landings INT DEFAULT 0,
+  -- New Instrument Flight fields
+  sim_if TIME DEFAULT NULL,
+  act_if TIME DEFAULT NULL,
+  ils_approaches INT DEFAULT 0,
+  rnp INT DEFAULT 0,
+  npa INT DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id)
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (aircraft_id) REFERENCES aircraft(id)
 );
 
--- Table: flight_breakdown
+-- Table: flight_breakdown (stores breakdown of flight time by role)
 CREATE TABLE IF NOT EXISTS flight_breakdown (
   id INT AUTO_INCREMENT PRIMARY KEY,
   flight_id INT NOT NULL,
@@ -74,7 +80,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   user_id INT NOT NULL,
   token VARCHAR(64) NOT NULL,
   expires_at DATETIME NOT NULL,
-  used BOOL DEFAULT 0,
+  used TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
@@ -83,7 +89,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 CREATE TABLE IF NOT EXISTS audit_trail (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
-  flight_id INT,
+  flight_id INT DEFAULT NULL,
   action VARCHAR(20) NOT NULL,
   details TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

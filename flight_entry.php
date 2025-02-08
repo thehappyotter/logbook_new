@@ -9,10 +9,10 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Set the default date to today's date.
+// Set the default date to today.
 $default_date = date('Y-m-d');
 
-// Retrieve the user's most recent flight to get the last aircraft used.
+// Retrieve the user's most recent flight to set the default aircraft.
 $stmtLast = $pdo->prepare("SELECT aircraft_id FROM flights WHERE user_id = ? ORDER BY flight_date DESC, id DESC LIMIT 1");
 $stmtLast->execute([$_SESSION['user_id']]);
 $lastFlight = $stmtLast->fetch();
@@ -22,11 +22,11 @@ $lastAircraftId = $lastFlight ? $lastFlight['aircraft_id'] : "";
 $stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
 $aircraft_list = $stmt->fetchAll();
 
-// Fetch bases from the database (ordered by base_name).
+// Fetch bases from the database.
 $stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
 $bases = $stmtBases->fetchAll();
 
-// Re-query the current user's default_base and default_role.
+// Re-query the current user's default_base and default_role from the database.
 $stmtUser = $pdo->prepare("SELECT default_base, default_role FROM users WHERE id = ?");
 $stmtUser->execute([$_SESSION['user_id']]);
 $userData = $stmtUser->fetch();
@@ -36,7 +36,7 @@ if (!$default_base && count($bases) > 0) {
     $default_base = $bases[0]['id'];
 }
 
-// Determine the default role for the Flight Role Breakdown row.
+// Determine the default role for the breakdown default row.
 $defaultRowRole = ($default_role === 'crew') ? "Crew" : "Day P1";
 
 // Build the complete set of role options for the dropdown.
@@ -59,8 +59,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error[] = "Invalid request. Please try again.";
     } else {
         $flight_date = $_POST['flight_date'];
-
-        // Aircraft field.
+        
+        // Aircraft fields.
         if (isset($_POST['aircraft_other_checkbox'])) {
             $aircraft_id = null;
             $aircraft_type = trim($_POST['aircraft_type']);
@@ -71,37 +71,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $aircraft_id = $selectedAircraft;
             $custom_aircraft_details = "";
         }
-
-        // "From" field.
+        
+        // From field.
         $flight_from = $_POST['from_select'];
         if (isset($_POST['from_other_checkbox'])) {
             $flight_from = trim($_POST['from_other']);
         }
-
-        // "To" field.
+        
+        // To field.
         $flight_to = $_POST['to_select'];
         if (isset($_POST['to_other_checkbox'])) {
             $flight_to = trim($_POST['to_other']);
         }
-
-        // Other fields.
+        
+        // Other Flight Details.
         $capacity = $_POST['capacity'];
         $pilot_type = $_POST['pilot_type'];
         $crew_names = trim($_POST['crew_names']);
         $rotors_start = $_POST['rotors_start'];
-        $rotors_stop  = $_POST['rotors_stop'];
-
+        $rotors_stop = $_POST['rotors_stop'];
+        
         try {
             $start = new DateTime($rotors_start);
-            $stop  = new DateTime($rotors_stop);
+            $stop = new DateTime($rotors_stop);
             $interval = $start->diff($stop);
             $flight_duration = $interval->format('%H:%I:%S');
         } catch (Exception $e) {
             $error[] = "Invalid time format for rotors start/stop.";
         }
-
+        
+        // NVG Section.
+        $nvg_time = isset($_POST['nvg_time']) ? intval($_POST['nvg_time']) : 0;
+        $nvg_takeoffs = isset($_POST['nvg_takeoffs']) ? intval($_POST['nvg_takeoffs']) : 0;
+        $nvg_landings = isset($_POST['nvg_landings']) ? intval($_POST['nvg_landings']) : 0;
+        
+        // Instrument Flight Section.
+        $sim_if = $_POST['sim_if'] ?? null;
+        $act_if = $_POST['act_if'] ?? null;
+        $ils_approaches = isset($_POST['ils_approaches']) ? intval($_POST['ils_approaches']) : 0;
+        $rnp = isset($_POST['rnp']) ? intval($_POST['rnp']) : 0;
+        $npa = isset($_POST['npa']) ? intval($_POST['npa']) : 0;
+        
         if (empty($error)) {
-            $stmt = $pdo->prepare("INSERT INTO flights (user_id, flight_date, aircraft_id, custom_aircraft_details, flight_from, flight_to, capacity, pilot_type, crew_names, rotors_start, rotors_stop, flight_duration) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            // Insert the flight record including the new NVG and Instrument Flight fields.
+            $stmt = $pdo->prepare("INSERT INTO flights (user_id, flight_date, aircraft_id, custom_aircraft_details, flight_from, flight_to, capacity, pilot_type, crew_names, rotors_start, rotors_stop, flight_duration, nvg_time, nvg_takeoffs, nvg_landings, sim_if, act_if, ils_approaches, rnp, npa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             $result = $stmt->execute([
                 $_SESSION['user_id'],
                 $flight_date,
@@ -114,7 +127,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $crew_names,
                 $rotors_start,
                 $rotors_stop,
-                $flight_duration
+                $flight_duration,
+                $nvg_time,
+                $nvg_takeoffs,
+                $nvg_landings,
+                $sim_if,
+                $act_if,
+                $ils_approaches,
+                $rnp,
+                $npa
             ]);
             if ($result) {
                 $flight_id = $pdo->lastInsertId();
@@ -144,14 +165,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <div class="flight-entry-container">
   <h2>Enter New Flight Record</h2>
   <?php 
-    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
-    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
+    foreach ($error as $msg) {
+        echo "<p class='error'>" . htmlspecialchars($msg) . "</p>";
+    }
+    foreach ($success as $msg) {
+        echo "<p class='success'>" . htmlspecialchars($msg) . "</p>";
+    }
   ?>
   <form method="post" action="flight_entry.php">
     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
     
+    <!-- Flight Details Section -->
     <fieldset>
-      <legend>Basic Flight Details</legend>
+      <legend>Flight Details</legend>
       
       <div class="form-group">
           <label for="flight_date">Date:</label>
@@ -160,7 +186,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       
       <!-- Aircraft Section -->
       <div class="form-group">
-          <label for="aircraft_select">Aircraft:</label>
+          <label for="aircraft_select">Aircraft Registration &amp; Type:</label>
           <select name="aircraft_select" id="aircraft_select">
             <option value="">Select Aircraft</option>
             <?php foreach ($aircraft_list as $ac): ?>
@@ -186,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <label for="from_select">From:</label>
           <select name="from_select" id="from_select">
             <?php foreach ($bases as $base): ?>
-              <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if ($base['id'] == $default_base) echo "selected"; ?>>
+              <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if($base['id'] == $default_base) echo "selected"; ?>>
                 <?php echo htmlspecialchars($base['base_name']); ?>
               </option>
             <?php endforeach; ?>
@@ -205,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <label for="to_select">To:</label>
           <select name="to_select" id="to_select">
             <?php foreach ($bases as $base): ?>
-              <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if ($base['id'] == $default_base) echo "selected"; ?>>
+              <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if($base['id'] == $default_base) echo "selected"; ?>>
                 <?php echo htmlspecialchars($base['base_name']); ?>
               </option>
             <?php endforeach; ?>
@@ -219,17 +245,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <input type="text" name="to_other" id="to_other" placeholder="Enter location">
       </div>
       
-      <!-- Other Basic Fields -->
+      <!-- Additional Flight Details -->
       <div class="form-group">
           <label for="capacity">Capacity:</label>
           <select name="capacity" id="capacity">
-            <option value="pilot">Pilot</option>
-            <option value="crew">Crew</option>
+            <option value="pilot" <?php echo ($default_role==='pilot') ? 'selected' : ''; ?>>Pilot</option>
+            <option value="crew" <?php echo ($default_role==='crew') ? 'selected' : ''; ?>>Crew</option>
           </select>
       </div>
       
       <div class="form-group">
-          <label for="pilot_type">Pilot Type:</label>
+          <label for="pilot_type">Single Pilot or Multi Pilot:</label>
           <select name="pilot_type" id="pilot_type">
             <option value="single">Single Pilot</option>
             <option value="multi">Multi Pilot</option>
@@ -237,23 +263,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
       
       <div class="form-group">
-          <label for="crew_names">Crew Names (comma separated):</label>
-          <input type="text" name="crew_names" id="crew_names" placeholder="Enter names">
+          <label for="crew_names">Crew Names:</label>
+          <input type="text" name="crew_names" id="crew_names" placeholder="Enter crew names (comma separated)">
       </div>
       
       <div class="form-group">
-          <label for="rotors_start">Rotors Start Time:</label>
+          <label for="rotors_start">Rotors Start:</label>
           <input type="time" name="rotors_start" id="rotors_start" required oninput="recalcBreakdown();">
       </div>
       
       <div class="form-group">
-          <label for="rotors_stop">Rotors Stop Time:</label>
+          <label for="rotors_stop">Rotors Stop:</label>
           <input type="time" name="rotors_stop" id="rotors_stop" required oninput="recalcBreakdown();">
       </div>
     </fieldset>
     
+    <!-- Flight Times Section -->
     <fieldset>
-      <legend>Flight Role Breakdown</legend>
+      <legend>Flight Times</legend>
       <p>Detail the breakdown of your flight time by role (in minutes). The first row is auto‑calculated based on your rotors times. You may change the role if needed.</p>
       <table id="breakdownTable" class="breakdown-table">
         <thead>
@@ -280,6 +307,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <button type="button" onclick="addRow();">Add Role</button>
     </fieldset>
     
+    <!-- NVG Section -->
+    <fieldset>
+      <legend>NVG</legend>
+      <div class="form-group">
+          <label for="nvg_time">NVG Time (minutes):</label>
+          <input type="number" name="nvg_time" id="nvg_time" min="0" value="0">
+      </div>
+      <div class="form-group">
+          <label for="nvg_takeoffs">NVG Takeoffs:</label>
+          <input type="number" name="nvg_takeoffs" id="nvg_takeoffs" min="0" value="0">
+      </div>
+      <div class="form-group">
+          <label for="nvg_landings">NVG Landings:</label>
+          <input type="number" name="nvg_landings" id="nvg_landings" min="0" value="0">
+      </div>
+    </fieldset>
+    
+    <!-- Instrument Flight Section -->
+    <fieldset>
+      <legend>Instrument Flight</legend>
+      <div class="form-group">
+          <label for="sim_if">Sim IF (time):</label>
+          <input type="time" name="sim_if" id="sim_if">
+      </div>
+      <div class="form-group">
+          <label for="act_if">Act IF (time):</label>
+          <input type="time" name="act_if" id="act_if">
+      </div>
+      <div class="form-group">
+          <label for="ils_approaches">ILS Approaches:</label>
+          <input type="number" name="ils_approaches" id="ils_approaches" min="0" value="0">
+      </div>
+      <div class="form-group">
+          <label for="rnp">RNP:</label>
+          <input type="number" name="rnp" id="rnp" min="0" value="0">
+      </div>
+      <div class="form-group">
+          <label for="npa">NPA:</label>
+          <input type="number" name="npa" id="npa" min="0" value="0">
+      </div>
+    </fieldset>
+    
     <div class="form-group">
         <input type="submit" value="Add Flight Record">
     </div>
@@ -289,57 +358,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!-- Include jQuery from Google's CDN -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
-$(document).ready(function() {
-  $("#aircraft_other_checkbox").change(function() {
+$(document).ready(function(){
+  $("#aircraft_other_checkbox").change(function(){
     $("#aircraft_other_div").toggle(this.checked);
   });
-  
-  $("#from_other_checkbox").change(function() {
+  $("#from_other_checkbox").change(function(){
     $("#from_other_div").toggle(this.checked);
   });
-  
-  $("#to_other_checkbox").change(function() {
+  $("#to_other_checkbox").change(function(){
     $("#to_other_div").toggle(this.checked);
   });
 });
 
-// Recalculate and update the default Flight Role Breakdown row.
-function recalcBreakdown() {
+// Function to recalc and update the default Flight Role Breakdown row.
+function recalcBreakdown(){
     const rotorsStart = document.getElementById('rotors_start').value;
     const rotorsStop = document.getElementById('rotors_stop').value;
-    if (!rotorsStart || !rotorsStop) return;
+    if(!rotorsStart || !rotorsStop) return;
     
     let start = new Date("1970-01-01T" + rotorsStart + "Z");
     let stop = new Date("1970-01-01T" + rotorsStop + "Z");
     let totalMinutes = (stop - start) / 60000;
-    if (totalMinutes < 0) { totalMinutes += 1440; }
+    if(totalMinutes < 0){ totalMinutes += 1440; }
     
     const $tbody = $("#breakdownTable tbody");
     let additionalMinutes = 0;
     
-    // Sum the durations in all rows except the default (first) row.
-    $tbody.find("tr").each(function(index) {
-        if (index > 0) {
+    $tbody.find("tr").each(function(index){
+        if(index > 0){
             const val = parseInt($(this).find("input[name='duration[]']").val()) || 0;
             additionalMinutes += val;
         }
     });
     
     let defaultMinutes = totalMinutes - additionalMinutes;
-    if (defaultMinutes < 0) defaultMinutes = 0;
+    if(defaultMinutes < 0) defaultMinutes = 0;
     
     $("#defaultDuration").val(defaultMinutes);
 }
 
 // When an additional row's duration changes, recalc the breakdown.
-$(document).on("change", "input[name='duration[]']", function() {
-    if ($(this).closest("tr").index() > 0) {
+$(document).on("change", "input[name='duration[]']", function(){
+    if($(this).closest("tr").index() > 0){
         recalcBreakdown();
     }
 });
 
 // Function to add an additional breakdown row.
-function addRow() {
+function addRow(){
     const tbody = document.getElementById("breakdownTable").querySelector("tbody");
     const newRow = tbody.insertRow();
     const cell1 = newRow.insertCell(0);
@@ -357,7 +423,7 @@ function addRow() {
 }
 
 // Function to remove a breakdown row.
-function removeRow(btn) {
+function removeRow(btn){
     const row = btn.parentNode.parentNode;
     row.parentNode.removeChild(row);
     recalcBreakdown();
