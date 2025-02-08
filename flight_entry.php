@@ -9,9 +9,12 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Set a default value if 'default_role' is not set in the session.
+$sessionDefaultRole = $_SESSION['default_role'] ?? 'pilot';
+
 // Prebuild the role options for the flight breakdown dropdown.
 $roleOptions = '';
-if ($_SESSION['default_role'] === 'crew') {
+if ($sessionDefaultRole === 'crew') {
     $roleOptions .= '<option value="Crew" selected>Crew</option>';
     $roleOptions .= '<option value="Day P1">Day P1</option>';
     $roleOptions .= '<option value="Day P2">Day P2</option>';
@@ -270,7 +273,7 @@ include('header.php');
           <tr>
             <td>
               <select name="role[]">
-                <?php if ($_SESSION['default_role'] === 'crew'): ?>
+                <?php if ($sessionDefaultRole === 'crew'): ?>
                   <option value="Crew" selected>Crew</option>
                   <option value="Day P1">Day P1</option>
                   <option value="Day P2">Day P2</option>
@@ -309,21 +312,18 @@ include('header.php');
   </form>
 </div>
 
-<!-- Include jQuery from Google's CDN without an integrity attribute -->
+<!-- Include jQuery from Google's CDN without integrity attribute -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
 $(document).ready(function() {
-  // Toggle the "Other" text input for the Aircraft field.
   $("#aircraft_other_checkbox").change(function() {
     $("#aircraft_other_div").toggle(this.checked);
   });
   
-  // Toggle the "Other" text input for the From field.
   $("#from_other_checkbox").change(function() {
     $("#from_other_div").toggle(this.checked);
   });
   
-  // Toggle the "Other" text input for the To field.
   $("#to_other_checkbox").change(function() {
     $("#to_other_div").toggle(this.checked);
   });
