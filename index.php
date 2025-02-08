@@ -6,11 +6,13 @@ require_once('functions.php');
 
 if (isset($_SESSION['user_id'])) {
 
+    // Process the statistics time range selection.
     if (isset($_GET['stats_range'])) {
         $_SESSION['stats_range'] = $_GET['stats_range'];
     }
     $selected_range = isset($_SESSION['stats_range']) ? $_SESSION['stats_range'] : 'all';
 
+    // Build a date filter clause based on the selected range.
     $date_filter = "";
     switch ($selected_range) {
         case 'last7':
@@ -27,6 +29,7 @@ if (isset($_SESSION['user_id'])) {
             break;
     }
 
+    // Calculate statistics.
     $stmtStats = $pdo->prepare("
         SELECT 
           COUNT(*) AS total_flights, 
@@ -42,6 +45,7 @@ if (isset($_SESSION['user_id'])) {
     $nvg_hours = floor($nvg_minutes / 60);
     $nvg_remaining_minutes = $nvg_minutes % 60;
 
+    // Output the statistics section.
     echo "<div class='flight-entry-container'>";
     echo "<form method='get' action='index.php' style='margin-bottom:20px;'>";
     echo "<div class='form-group'>";
@@ -53,9 +57,7 @@ if (isset($_SESSION['user_id'])) {
     echo "<option value='all'" . ($selected_range=='all' ? " selected" : "") . ">All Time</option>";
     echo "</select>";
     echo "</div>";
-    echo "<div class='form-group'>";
-    echo "<input type='submit' value='Update'>";
-    echo "</div>";
+    echo "<div class='form-group'><input type='submit' value='Update'></div>";
     echo "</form>";
 
     echo "<div id='statsContainer' style='margin-bottom: 20px;'>";
@@ -70,11 +72,10 @@ if (isset($_SESSION['user_id'])) {
     echo "</div>";
     echo "</div>";
 
+    // Retrieve the user's flight records.
     $stmt = $pdo->prepare("SELECT * FROM flights WHERE user_id = ? ORDER BY flight_date DESC");
     $stmt->execute([$_SESSION['user_id']]);
     $flights = $stmt->fetchAll();
-
-    $csrf_token = getCSRFToken();
 
     echo "<h2>Your Flight Log</h2>";
     if ($flights) {
@@ -91,6 +92,7 @@ if (isset($_SESSION['user_id'])) {
         foreach ($flights as $flight) {
             echo "<tr>";
             echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
+            // For Aircraft, display registration (or custom details)
             if ($flight['aircraft_id'] !== null) {
                 $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
                 $stmt2->execute([$flight['aircraft_id']]);
@@ -100,18 +102,34 @@ if (isset($_SESSION['user_id'])) {
             } else {
                 echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
             }
-            echo "<td>" . htmlspecialchars($flight['flight_from']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['flight_to']) . "</td>";
+            // For "From": if numeric, look up base_name; otherwise, display as is.
+            $from = $flight['flight_from'];
+            if (is_numeric($from)) {
+                $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                $stmtFrom->execute([$from]);
+                $baseData = $stmtFrom->fetch();
+                if ($baseData) {
+                    $from = $baseData['base_name'];
+                }
+            }
+            echo "<td>" . htmlspecialchars($from) . "</td>";
+            // For "To": do the same as for "From"
+            $to = $flight['flight_to'];
+            if (is_numeric($to)) {
+                $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                $stmtTo->execute([$to]);
+                $baseData = $stmtTo->fetch();
+                if ($baseData) {
+                    $to = $baseData['base_name'];
+                }
+            }
+            echo "<td>" . htmlspecialchars($to) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
             echo "<td>" . htmlspecialchars($flight['notes']) . "</td>";
             echo "<td>";
             if ($flight['user_id'] == $_SESSION['user_id'] || $_SESSION['role'] == 'admin') {
                 echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
-                echo "<form method='post' action='flight_delete.php' style='display:inline;' onsubmit='return confirm(\"Are you sure?\");'>";
-                echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars($csrf_token) . "'>";
-                echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
-                echo "<input type='submit' value='Delete'>";
-                echo "</form>";
+                echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
             }
             echo "</td>";
             echo "</tr>";
@@ -122,6 +140,7 @@ if (isset($_SESSION['user_id'])) {
     }
     echo "</div>";
 } else {
+    // When the user is not logged in.
     echo "<div class='flight-entry-container'>";
     echo "<h2>Welcome to the Flight Log</h2>";
     echo "<p>Please <a href='login.php'>login</a> or <a href='register.php'>register</a> to view your flight records and statistics.</p>";
@@ -133,6 +152,7 @@ include('footer.php');
 document.addEventListener("DOMContentLoaded", function() {
     var statsContent = document.getElementById('statsContent');
     var toggleIcon = document.getElementById('toggleIcon');
+
     if (statsContent && toggleIcon) {
         var collapsed = localStorage.getItem('statsCollapsed');
         if (collapsed === 'true') {

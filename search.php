@@ -12,7 +12,7 @@ if (!isset($_SESSION['user_id'])) {
 $searchQuery = "";
 $start_date  = "";
 $end_date    = "";
-$sort = "flight_date DESC";
+$sort = "flight_date DESC";  // Default sort order
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $perPage = 10;
 $offset = ($page - 1) * $perPage;
@@ -43,10 +43,12 @@ if (isset($_GET['end_date']) && trim($_GET['end_date']) !== "") {
 
 $whereSQL = implode(" AND ", $whereClauses);
 
+// Count total results.
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM flights f JOIN aircraft a ON f.aircraft_id = a.id WHERE $whereSQL");
 $stmt->execute($params);
 $totalResults = $stmt->fetchColumn();
 
+// Retrieve the flight records with limit and offset.
 $stmt = $pdo->prepare("SELECT f.*, a.registration FROM flights f JOIN aircraft a ON f.aircraft_id = a.id WHERE $whereSQL ORDER BY $sort LIMIT $perPage OFFSET $offset");
 $stmt->execute($params);
 $flights = $stmt->fetchAll();
@@ -81,22 +83,50 @@ include('header.php');
         foreach ($flights as $flight) {
             echo "<tr>";
             echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['registration']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['flight_from']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['flight_to']) . "</td>";
+            // Aircraft column
+            if ($flight['aircraft_id'] !== null) {
+                $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
+                $stmt2->execute([$flight['aircraft_id']]);
+                $aircraft = $stmt2->fetch(PDO::FETCH_ASSOC);
+                $aircraft_reg = ($aircraft !== false && isset($aircraft['registration'])) ? $aircraft['registration'] : 'Unknown';
+                echo "<td>" . htmlspecialchars($aircraft_reg) . "</td>";
+            } else {
+                echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
+            }
+            // "From" column.
+            $from = $flight['flight_from'];
+            if (is_numeric($from)) {
+                $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                $stmtFrom->execute([$from]);
+                $baseData = $stmtFrom->fetch();
+                if ($baseData) {
+                    $from = $baseData['base_name'];
+                }
+            }
+            echo "<td>" . htmlspecialchars($from) . "</td>";
+            // "To" column.
+            $to = $flight['flight_to'];
+            if (is_numeric($to)) {
+                $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                $stmtTo->execute([$to]);
+                $baseData = $stmtTo->fetch();
+                if ($baseData) {
+                    $to = $baseData['base_name'];
+                }
+            }
+            echo "<td>" . htmlspecialchars($to) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
             echo "<td>";
-            echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
-            echo "<form method='post' action='flight_delete.php' style='display:inline;' onsubmit='return confirm(\"Are you sure?\");'>";
-            echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars($csrf_token) . "'>";
-            echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
-            echo "<input type='submit' value='Delete'>";
-            echo "</form>";
+            if ($flight['user_id'] == $_SESSION['user_id'] || $_SESSION['role'] == 'admin') {
+                echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
+                echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
+            }
             echo "</td>";
             echo "</tr>";
         }
         echo "</tbody></table>";
-      
+        
+        // Pagination links.
         $totalPages = ceil($totalResults / $perPage);
         for ($i = 1; $i <= $totalPages; $i++) {
             if ($i == $page) {
