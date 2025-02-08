@@ -9,6 +9,15 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
+// Set the default date to today's date.
+$default_date = date('Y-m-d');
+
+// Retrieve the user's most recent flight to get the last aircraft used.
+$stmtLast = $pdo->prepare("SELECT aircraft_id FROM flights WHERE user_id = ? ORDER BY flight_date DESC, id DESC LIMIT 1");
+$stmtLast->execute([$_SESSION['user_id']]);
+$lastFlight = $stmtLast->fetch();
+$lastAircraftId = $lastFlight ? $lastFlight['aircraft_id'] : "";
+
 // Fetch master list of aircraft.
 $stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
 $aircraft_list = $stmt->fetchAll();
@@ -17,25 +26,20 @@ $aircraft_list = $stmt->fetchAll();
 $stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
 $bases = $stmtBases->fetchAll();
 
-// Re-query the current user's default_base and default_role from the database.
-// This ensures that any changes (e.g., via My Account) are applied.
+// Re-query the current user's default_base and default_role.
 $stmtUser = $pdo->prepare("SELECT default_base, default_role FROM users WHERE id = ?");
 $stmtUser->execute([$_SESSION['user_id']]);
 $userData = $stmtUser->fetch();
 $default_base = $userData['default_base'] ?? '';
 $default_role = $userData['default_role'] ?? 'pilot';
-
-// If no default base is set and there are bases available, use the first one.
 if (!$default_base && count($bases) > 0) {
     $default_base = $bases[0]['id'];
 }
 
-// Determine the default role text for the breakdown default row.
-// If the user's default_role is crew, default to "Crew"; otherwise default to "Day P1".
+// Determine the default role for the Flight Role Breakdown row.
 $defaultRowRole = ($default_role === 'crew') ? "Crew" : "Day P1";
 
 // Build the complete set of role options for the dropdown.
-// The option whose value matches $defaultRowRole will have the "selected" attribute.
 $roleOptions = '
 <option value="Day P1"' . ($defaultRowRole == "Day P1" ? ' selected' : '') . '>Day P1</option>
 <option value="Day P2"' . ($defaultRowRole == "Day P2" ? ' selected' : '') . '>Day P2</option>
@@ -151,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       
       <div class="form-group">
           <label for="flight_date">Date:</label>
-          <input type="date" name="flight_date" id="flight_date" required>
+          <input type="date" name="flight_date" id="flight_date" value="<?php echo $default_date; ?>" required>
       </div>
       
       <!-- Aircraft Section -->
@@ -160,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
           <select name="aircraft_select" id="aircraft_select">
             <option value="">Select Aircraft</option>
             <?php foreach ($aircraft_list as $ac): ?>
-              <option value="<?php echo $ac['id']; ?>">
+              <option value="<?php echo $ac['id']; ?>" <?php echo ($ac['id'] == $lastAircraftId) ? 'selected' : ''; ?>>
                 <?php echo htmlspecialchars($ac['registration']); ?> - <?php echo htmlspecialchars($ac['type']); ?>
               </option>
             <?php endforeach; ?>
@@ -282,7 +286,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </form>
 </div>
 
-<!-- Include jQuery from Google's CDN without integrity attribute -->
+<!-- Include jQuery from Google's CDN -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
 $(document).ready(function() {
@@ -299,9 +303,7 @@ $(document).ready(function() {
   });
 });
 
-// Function to recalculate and update the default breakdown row.
-// It calculates the total flight time in minutes based on rotors times,
-// subtracts any manually entered durations in additional rows, and updates the default row.
+// Recalculate and update the default Flight Role Breakdown row.
 function recalcBreakdown() {
     const rotorsStart = document.getElementById('rotors_start').value;
     const rotorsStop = document.getElementById('rotors_stop').value;
@@ -315,7 +317,7 @@ function recalcBreakdown() {
     const $tbody = $("#breakdownTable tbody");
     let additionalMinutes = 0;
     
-    // Sum the durations from all additional rows (rows with index > 0)
+    // Sum the durations in all rows except the default (first) row.
     $tbody.find("tr").each(function(index) {
         if (index > 0) {
             const val = parseInt($(this).find("input[name='duration[]']").val()) || 0;
