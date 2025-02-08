@@ -42,29 +42,7 @@ footer {
     bottom: 0;
 }
 
-.error {
-    color: red;
-}
-
-.success {
-    color: green;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 20px;
-}
-
-table, th, td {
-    border: 1px solid #ccc;
-}
-
-th, td {
-    padding: 10px;
-    text-align: left;
-}
-
+/* Form styles */
 form label {
     display: block;
     margin-top: 10px;
@@ -81,15 +59,58 @@ form textarea {
     width: 100%;
     padding: 8px;
     box-sizing: border-box;
+    font-size: 1rem;
 }
 
-form input[type="submit"] {
+form input[type="submit"],
+button {
     margin-top: 15px;
     padding: 10px 20px;
     background: #003366;
     color: #ffcc00;
     border: none;
     cursor: pointer;
+}
+
+/* Explicit styling for select and option to ensure text is visible */
+select {
+    color: #333;
+    background-color: #fff;
+    border: 1px solid #ccc;
+}
+
+option {
+    color: #333;
+    background-color: #fff;
+}
+
+/* Flight entry container styling */
+.flight-entry-container {
+    background: #fff;
+    padding: 20px;
+    margin: 0 auto 20px;
+    border: 1px solid #ccc;
+    max-width: 800px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+/* Table styles for flight breakdown */
+.breakdown-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 15px;
+}
+
+.breakdown-table th,
+.breakdown-table td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
 }
 
 /* Responsive adjustments */

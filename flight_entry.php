@@ -24,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $flight_date = $_POST['flight_date'];
 
+        // Aircraft field.
         $selectedAircraft = $_POST['aircraft_select'];
         if ($selectedAircraft !== "other") {
             $aircraft_id = $selectedAircraft;
@@ -35,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $custom_aircraft_details = "Type: " . $aircraft_type . ", Registration: " . $aircraft_registration;
         }
 
+        // "From" field.
         $selectedFrom = $_POST['from_select'];
         if ($selectedFrom !== "other") {
             $flight_from = $selectedFrom;
@@ -42,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flight_from = trim($_POST['from_other']);
         }
 
+        // "To" field.
         $selectedTo = $_POST['to_select'];
         if ($selectedTo !== "other") {
             $flight_to = $selectedTo;
@@ -49,6 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $flight_to = trim($_POST['to_other']);
         }
 
+        // Other fields.
         $capacity = $_POST['capacity'];
         $pilot_type = $_POST['pilot_type'];
         $crew_names = trim($_POST['crew_names']);
@@ -104,12 +108,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// Fetch master list of aircraft.
 $stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
 $aircraft_list = $stmt->fetchAll();
 
+// Fetch bases from the database (order by base_name).
 $stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
 $bases = $stmtBases->fetchAll();
 
+// Fetch current user's default base.
 $stmtUser = $pdo->prepare("SELECT default_base FROM users WHERE id = ?");
 $stmtUser->execute([$_SESSION['user_id']]);
 $user = $stmtUser->fetch();
@@ -120,139 +127,160 @@ if (!$default_base && count($bases) > 0) {
 
 include('header.php');
 ?>
-<h2>Enter New Flight Record</h2>
-<?php 
-foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
-foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
-?>
-<form method="post" action="flight_entry.php">
-  <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
-  <fieldset>
-    <legend>Basic Flight Details</legend>
-    
-    <label for="flight_date">Date:</label>
-    <input type="date" name="flight_date" id="flight_date" required>
-    
-    <p><strong>Aircraft:</strong></p>
-    <label for="aircraft_select">Select Aircraft:</label>
-    <select name="aircraft_select" id="aircraft_select" onchange="toggleField(this, 'aircraftManualDiv');">
-      <option value="">Select Aircraft</option>
-      <?php foreach ($aircraft_list as $ac): ?>
-        <option value="<?php echo $ac['id']; ?>">
-          <?php echo htmlspecialchars($ac['registration']); ?> - <?php echo htmlspecialchars($ac['type']); ?>
-        </option>
-      <?php endforeach; ?>
-      <option value="other">Other (Enter manually)</option>
-    </select>
-    <div id="aircraftManualDiv" style="display:none; margin-top:10px;">
-      <label for="aircraft_type">Aircraft Type:</label>
-      <input type="text" name="aircraft_type" id="aircraft_type">
-      <label for="aircraft_registration">Aircraft Registration:</label>
-      <input type="text" name="aircraft_registration" id="aircraft_registration">
-    </div>
-    
-    <p><strong>From:</strong></p>
-    <label for="from_select">Select Base:</label>
-    <select name="from_select" id="from_select" onchange="toggleField(this, 'fromManualDiv');">
-      <?php foreach ($bases as $base): ?>
-        <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if ($base['id'] == $default_base) echo "selected"; ?>>
-          <?php echo htmlspecialchars($base['base_name']); ?>
-        </option>
-      <?php endforeach; ?>
-      <option value="other">Other (Enter location)</option>
-    </select>
-    <div id="fromManualDiv" style="display:none; margin-top:10px;">
-      <input type="text" name="from_other" placeholder="Enter location">
-    </div>
-    
-    <p><strong>To:</strong></p>
-    <label for="to_select">Select Base:</label>
-    <select name="to_select" id="to_select" onchange="toggleField(this, 'toManualDiv');">
-      <?php foreach ($bases as $base): ?>
-        <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if ($base['id'] == $default_base) echo "selected"; ?>>
-          <?php echo htmlspecialchars($base['base_name']); ?>
-        </option>
-      <?php endforeach; ?>
-      <option value="other">Other (Enter location)</option>
-    </select>
-    <div id="toManualDiv" style="display:none; margin-top:10px;">
-      <input type="text" name="to_other" placeholder="Enter location">
-    </div>
-    
-    <label for="capacity">Capacity:</label>
-    <select name="capacity" id="capacity">
-      <option value="pilot">Pilot</option>
-      <option value="crew">Crew</option>
-    </select>
-    
-    <label for="pilot_type">Pilot Type:</label>
-    <select name="pilot_type" id="pilot_type">
-      <option value="single">Single Pilot</option>
-      <option value="multi">Multi Pilot</option>
-    </select>
-    
-    <label for="crew_names">Crew Names (comma separated):</label>
-    <input type="text" name="crew_names" id="crew_names" placeholder="Enter names">
-    
-    <label for="rotors_start">Rotors Start Time:</label>
-    <input type="time" name="rotors_start" id="rotors_start" required oninput="updateDefaultDuration();">
-    
-    <label for="rotors_stop">Rotors Stop Time:</label>
-    <input type="time" name="rotors_stop" id="rotors_stop" required oninput="updateDefaultDuration();">
-  </fieldset>
-  
-  <fieldset>
-    <legend>Flight Role Breakdown</legend>
-    <p>Detail the breakdown of your flight time by role (in minutes):</p>
-    <table id="breakdownTable" style="width:100%; border-collapse: collapse;">
-      <thead>
-        <tr>
-          <th>Role</th>
-          <th>Duration (minutes)</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>
-            <select name="role[]">
-              <?php if ($_SESSION['default_role'] === 'crew'): ?>
-                <option value="Crew" selected>Crew</option>
-                <option value="Day P1">Day P1</option>
-                <option value="Day P2">Day P2</option>
-                <option value="Day Pilot under training">Day Pilot under training</option>
-                <option value="Night P1">Night P1</option>
-                <option value="Night P2">Night P2</option>
-                <option value="Night Pilot under training">Night Pilot under training</option>
-                <option value="Simulator">Simulator</option>
-              <?php else: ?>
-                <option value="Day P1" selected>Day P1</option>
-                <option value="Day P2">Day P2</option>
-                <option value="Day Pilot under training">Day Pilot under training</option>
-                <option value="Night P1">Night P1</option>
-                <option value="Night P2">Night P2</option>
-                <option value="Night Pilot under training">Night Pilot under training</option>
-                <option value="Simulator">Simulator</option>
-                <option value="Crew">Crew</option>
-              <?php endif; ?>
+<div class="flight-entry-container">
+    <h2>Enter New Flight Record</h2>
+    <?php 
+    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
+    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
+    ?>
+    <form method="post" action="flight_entry.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      
+      <fieldset>
+        <legend>Basic Flight Details</legend>
+        
+        <div class="form-group">
+            <label for="flight_date">Date:</label>
+            <input type="date" name="flight_date" id="flight_date" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="aircraft_select">Aircraft:</label>
+            <select name="aircraft_select" id="aircraft_select" onchange="toggleField(this, 'aircraftManualDiv');">
+              <option value="">Select Aircraft</option>
+              <?php foreach ($aircraft_list as $ac): ?>
+                <option value="<?php echo $ac['id']; ?>">
+                  <?php echo htmlspecialchars($ac['registration']); ?> - <?php echo htmlspecialchars($ac['type']); ?>
+                </option>
+              <?php endforeach; ?>
+              <option value="other">Other (Enter manually)</option>
             </select>
-          </td>
-          <td>
-            <input type="number" name="duration[]" id="defaultDuration" min="0" placeholder="Minutes" required>
-          </td>
-          <td>
-            <button type="button" onclick="removeRow(this);">Remove</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <button type="button" onclick="addRow();">Add Role</button>
-  </fieldset>
-  
-  <input type="submit" value="Add Flight Record">
-</form>
+        </div>
+        <div class="form-group" id="aircraftManualDiv" style="display:none;">
+            <label for="aircraft_type">Aircraft Type:</label>
+            <input type="text" name="aircraft_type" id="aircraft_type">
+            <label for="aircraft_registration">Aircraft Registration:</label>
+            <input type="text" name="aircraft_registration" id="aircraft_registration">
+        </div>
+        
+        <div class="form-group">
+            <label for="from_select">From:</label>
+            <select name="from_select" id="from_select" onchange="toggleField(this, 'fromManualDiv');">
+              <?php foreach ($bases as $base): ?>
+                <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if ($base['id'] == $default_base) echo "selected"; ?>>
+                  <?php echo htmlspecialchars($base['base_name']); ?>
+                </option>
+              <?php endforeach; ?>
+              <option value="other">Other (Enter location)</option>
+            </select>
+        </div>
+        <div class="form-group" id="fromManualDiv" style="display:none;">
+            <input type="text" name="from_other" placeholder="Enter location">
+        </div>
+        
+        <div class="form-group">
+            <label for="to_select">To:</label>
+            <select name="to_select" id="to_select" onchange="toggleField(this, 'toManualDiv');">
+              <?php foreach ($bases as $base): ?>
+                <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if ($base['id'] == $default_base) echo "selected"; ?>>
+                  <?php echo htmlspecialchars($base['base_name']); ?>
+                </option>
+              <?php endforeach; ?>
+              <option value="other">Other (Enter location)</option>
+            </select>
+        </div>
+        <div class="form-group" id="toManualDiv" style="display:none;">
+            <input type="text" name="to_other" placeholder="Enter location">
+        </div>
+        
+        <div class="form-group">
+            <label for="capacity">Capacity:</label>
+            <select name="capacity" id="capacity">
+              <option value="pilot">Pilot</option>
+              <option value="crew">Crew</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="pilot_type">Pilot Type:</label>
+            <select name="pilot_type" id="pilot_type">
+              <option value="single">Single Pilot</option>
+              <option value="multi">Multi Pilot</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="crew_names">Crew Names (comma separated):</label>
+            <input type="text" name="crew_names" id="crew_names" placeholder="Enter names">
+        </div>
+        
+        <div class="form-group">
+            <label for="rotors_start">Rotors Start Time:</label>
+            <input type="time" name="rotors_start" id="rotors_start" required oninput="updateDefaultDuration();">
+        </div>
+        
+        <div class="form-group">
+            <label for="rotors_stop">Rotors Stop Time:</label>
+            <input type="time" name="rotors_stop" id="rotors_stop" required oninput="updateDefaultDuration();">
+        </div>
+      </fieldset>
+      
+      <fieldset>
+        <legend>Flight Role Breakdown</legend>
+        <p>Detail the breakdown of your flight time by role (in minutes):</p>
+        <table id="breakdownTable" class="breakdown-table">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Duration (minutes)</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <select name="role[]">
+                  <?php if ($_SESSION['default_role'] === 'crew'): ?>
+                    <option value="Crew" selected>Crew</option>
+                    <option value="Day P1">Day P1</option>
+                    <option value="Day P2">Day P2</option>
+                    <option value="Day Pilot under training">Day Pilot under training</option>
+                    <option value="Night P1">Night P1</option>
+                    <option value="Night P2">Night P2</option>
+                    <option value="Night Pilot under training">Night Pilot under training</option>
+                    <option value="Simulator">Simulator</option>
+                  <?php else: ?>
+                    <option value="Day P1" selected>Day P1</option>
+                    <option value="Day P2">Day P2</option>
+                    <option value="Day Pilot under training">Day Pilot under training</option>
+                    <option value="Night P1">Night P1</option>
+                    <option value="Night P2">Night P2</option>
+                    <option value="Night Pilot under training">Night Pilot under training</option>
+                    <option value="Simulator">Simulator</option>
+                    <option value="Crew">Crew</option>
+                  <?php endif; ?>
+                </select>
+              </td>
+              <td>
+                <input type="number" name="duration[]" id="defaultDuration" min="0" placeholder="Minutes" required>
+              </td>
+              <td>
+                <button type="button" onclick="removeRow(this);">Remove</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <button type="button" onclick="addRow();">Add Role</button>
+      </fieldset>
+      
+      <div class="form-group">
+          <input type="submit" value="Add Flight Record">
+      </div>
+    </form>
+</div>
 
 <script>
+// Toggle manual input fields.
 function toggleField(selectElem, divId) {
     if (selectElem.value === "other") {
         document.getElementById(divId).style.display = "block";
@@ -261,6 +289,7 @@ function toggleField(selectElem, divId) {
     }
 }
 
+// Auto-update the default duration.
 function updateDefaultDuration() {
     var startTime = document.getElementById('rotors_start').value;
     var stopTime = document.getElementById('rotors_stop').value;
@@ -273,6 +302,7 @@ function updateDefaultDuration() {
     }
 }
 
+// Dynamic flight breakdown row functions.
 function addRow() {
     var tbody = document.getElementById("breakdownTable").getElementsByTagName("tbody")[0];
     var newRow = tbody.insertRow();
