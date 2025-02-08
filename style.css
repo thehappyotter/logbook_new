@@ -7,8 +7,8 @@ body {
 }
 
 header {
-    background: #003366; /* dark blue */
-    color: #ffcc00;      /* yellow */
+    background: #003366;
+    color: #ffcc00;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -29,7 +29,7 @@ header .user-menu span {
 
 main {
     padding: 20px;
-    margin-bottom: 60px; /* space for fixed footer */
+    margin-bottom: 60px;
 }
 
 footer {
@@ -42,7 +42,22 @@ footer {
     bottom: 0;
 }
 
+/* Container for page content */
+.flight-entry-container {
+    background: #fff;
+    padding: 20px;
+    margin: 20px auto;
+    border: 1px solid #ccc;
+    max-width: 800px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
 /* Form styles */
+.form-group {
+    margin-bottom: 15px;
+}
+
 form label {
     display: block;
     margin-top: 10px;
@@ -72,7 +87,7 @@ button {
     cursor: pointer;
 }
 
-/* Explicit styling for select and option to ensure text is visible */
+/* Explicit styling for select and option */
 select {
     color: #333;
     background-color: #fff;
@@ -84,32 +99,19 @@ option {
     background-color: #fff;
 }
 
-/* Flight entry container styling */
-.flight-entry-container {
-    background: #fff;
-    padding: 20px;
-    margin: 0 auto 20px;
-    border: 1px solid #ccc;
-    max-width: 800px;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.form-group {
-    margin-bottom: 15px;
-}
-
-/* Table styles for flight breakdown */
-.breakdown-table {
+/* Table styles */
+table {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 15px;
 }
 
-.breakdown-table th,
-.breakdown-table td {
+table, th, td {
     border: 1px solid #ccc;
-    padding: 8px;
+}
+
+th, td {
+    padding: 10px;
     text-align: left;
 }
 

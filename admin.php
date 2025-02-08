@@ -1,5 +1,5 @@
 <?php
-// admin.php - Updated Admin Panel with Bases Management
+// admin.php - Admin Panel
 session_start();
 require_once('db.php');
 require_once('functions.php');
@@ -14,7 +14,7 @@ $success = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-        $error[] = "Invalid request. Please try again.";
+        $error[] = "Invalid CSRF token.";
     } else {
         if (isset($_POST['add_aircraft'])) {
             $registration = trim($_POST['registration']);
@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($base_name == "") {
                 $error[] = "Base name cannot be empty.";
             } else {
-                $stmt = $pdo->prepare("INSERT INTO bases (name) VALUES (?)");
+                $stmt = $pdo->prepare("INSERT INTO bases (base_name) VALUES (?)");
                 if ($stmt->execute([$base_name])) {
                     $success[] = "Base added successfully.";
                 } else {
@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($base_name == "") {
                 $error[] = "Base name cannot be empty.";
             } else {
-                $stmt = $pdo->prepare("UPDATE bases SET name = ? WHERE id = ?");
+                $stmt = $pdo->prepare("UPDATE bases SET base_name = ? WHERE id = ?");
                 if ($stmt->execute([$base_name, $base_id])) {
                     $success[] = "Base updated successfully.";
                 } else {
@@ -83,116 +83,143 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
+
 include('header.php');
 ?>
-<h2>Admin Panel</h2>
-<?php 
-foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
-foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
-?>
-<section>
-  <h3>Add New Aircraft</h3>
-  <form method="post" action="admin.php">
-    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
-    <input type="hidden" name="add_aircraft" value="1">
-    <label for="registration">Registration:</label>
-    <input type="text" name="registration" required>
-    <label for="type">Aircraft Type:</label>
-    <input type="text" name="type" required>
-    <label for="manufacturer_serial">Manufacturer Serial Number:</label>
-    <input type="text" name="manufacturer_serial">
-    <label for="subtype">Sub Type:</label>
-    <input type="text" name="subtype">
-    <input type="submit" value="Add Aircraft">
-  </form>
-</section>
-<section>
-  <h3>Add New User Account</h3>
-  <form method="post" action="admin.php">
-    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
-    <input type="hidden" name="add_user" value="1">
-    <label for="username">Username:</label>
-    <input type="text" name="username" required>
-    <label for="email">Email:</label>
-    <input type="email" name="email" required>
-    <label for="password">Password:</label>
-    <input type="password" name="password" required>
-    <label for="role">Role:</label>
-    <select name="role">
-      <option value="user">User</option>
-      <option value="admin">Admin</option>
-    </select>
-    <label for="default_role">Default Role:</label>
-    <select name="default_role">
-      <option value="pilot">Pilot</option>
-      <option value="crew">Crew</option>
-    </select>
-    <input type="submit" value="Add User">
-  </form>
-</section>
-<section>
-  <h3>Manage Bases</h3>
-  <!-- Form to add a new base -->
-  <form method="post" action="admin.php" style="margin-bottom: 20px;">
-    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
-    <input type="hidden" name="add_base" value="1">
-    <label for="base_name">Add New Base:</label>
-    <input type="text" name="base_name" id="base_name" required>
-    <input type="submit" value="Add Base">
-  </form>
-  <!-- List existing bases with options to edit or delete -->
-  <?php
-  $stmtBases = $pdo->query("SELECT * FROM bases ORDER BY name ASC");
-  $bases = $stmtBases->fetchAll();
-  if ($bases) {
-      echo "<table>";
-      echo "<tr><th>ID</th><th>Name</th><th>Actions</th></tr>";
-      foreach ($bases as $base) {
-          echo "<tr>";
-          echo "<td>" . htmlspecialchars($base['id']) . "</td>";
-          echo "<td>" . htmlspecialchars($base['name']) . "</td>";
-          echo "<td>";
-          echo "<form style='display:inline;' method='post' action='admin.php'>";
-          echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars(getCSRFToken()) . "'>";
-          echo "<input type='hidden' name='base_id' value='" . htmlspecialchars($base['id']) . "'>";
-          echo "<input type='text' name='base_name' value='" . htmlspecialchars($base['name']) . "' required>";
-          echo "<input type='submit' name='edit_base' value='Edit'>";
-          echo "</form> ";
-          echo "<form style='display:inline;' method='post' action='admin.php' onsubmit='return confirm(\"Are you sure?\");'>";
-          echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars(getCSRFToken()) . "'>";
-          echo "<input type='hidden' name='base_id' value='" . htmlspecialchars($base['id']) . "'>";
-          echo "<input type='submit' name='delete_base' value='Delete'>";
-          echo "</form>";
-          echo "</td>";
-          echo "</tr>";
-      }
-      echo "</table>";
-  } else {
-      echo "<p>No bases found.</p>";
-  }
+<div class="flight-entry-container">
+  <h2>Admin Panel</h2>
+  <?php 
+  foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
+  foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
   ?>
-</section>
-<section>
-  <h3>Audit Trail</h3>
-  <?php
-  $stmt = $pdo->query("SELECT a.*, u.username FROM audit_trail a JOIN users u ON a.user_id = u.id ORDER BY a.created_at DESC LIMIT 50");
-  $auditLogs = $stmt->fetchAll();
-  if ($auditLogs) {
-      echo "<table>";
-      echo "<tr><th>Timestamp</th><th>User</th><th>Flight ID</th><th>Action</th><th>Details</th></tr>";
-      foreach ($auditLogs as $log) {
-          echo "<tr>";
-          echo "<td>" . htmlspecialchars($log['created_at']) . "</td>";
-          echo "<td>" . htmlspecialchars($log['username']) . "</td>";
-          echo "<td>" . htmlspecialchars($log['flight_id']) . "</td>";
-          echo "<td>" . htmlspecialchars($log['action']) . "</td>";
-          echo "<td>" . htmlspecialchars($log['details']) . "</td>";
-          echo "</tr>";
+  <section>
+    <h3>Add New Aircraft</h3>
+    <form method="post" action="admin.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+      <input type="hidden" name="add_aircraft" value="1">
+      <div class="form-group">
+          <label for="registration">Registration:</label>
+          <input type="text" name="registration" required>
+      </div>
+      <div class="form-group">
+          <label for="type">Aircraft Type:</label>
+          <input type="text" name="type" required>
+      </div>
+      <div class="form-group">
+          <label for="manufacturer_serial">Manufacturer Serial Number:</label>
+          <input type="text" name="manufacturer_serial">
+      </div>
+      <div class="form-group">
+          <label for="subtype">Sub Type:</label>
+          <input type="text" name="subtype">
+      </div>
+      <div class="form-group">
+          <input type="submit" value="Add Aircraft">
+      </div>
+    </form>
+  </section>
+  <section>
+    <h3>Add New User Account</h3>
+    <form method="post" action="admin.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+      <input type="hidden" name="add_user" value="1">
+      <div class="form-group">
+          <label for="username">Username:</label>
+          <input type="text" name="username" required>
+      </div>
+      <div class="form-group">
+          <label for="email">Email:</label>
+          <input type="email" name="email" required>
+      </div>
+      <div class="form-group">
+          <label for="password">Password:</label>
+          <input type="password" name="password" required>
+      </div>
+      <div class="form-group">
+          <label for="role">Role:</label>
+          <select name="role">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+      </div>
+      <div class="form-group">
+          <label for="default_role">Default Role:</label>
+          <select name="default_role">
+            <option value="pilot">Pilot</option>
+            <option value="crew">Crew</option>
+          </select>
+      </div>
+      <div class="form-group">
+          <input type="submit" value="Add User">
+      </div>
+    </form>
+  </section>
+  <section>
+    <h3>Manage Bases</h3>
+    <form method="post" action="admin.php" style="margin-bottom: 20px;">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+      <input type="hidden" name="add_base" value="1">
+      <div class="form-group">
+          <label for="base_name">Add New Base:</label>
+          <input type="text" name="base_name" id="base_name" required>
+      </div>
+      <div class="form-group">
+          <input type="submit" value="Add Base">
+      </div>
+    </form>
+    <?php
+      $stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
+      $bases = $stmtBases->fetchAll();
+      if ($bases) {
+          echo "<table>";
+          echo "<thead><tr><th>ID</th><th>Base Name</th><th>Actions</th></tr></thead><tbody>";
+          foreach ($bases as $base) {
+              echo "<tr>";
+              echo "<td>" . htmlspecialchars($base['id']) . "</td>";
+              echo "<td>" . htmlspecialchars($base['base_name']) . "</td>";
+              echo "<td>";
+              echo "<form style='display:inline;' method='post' action='admin.php'>";
+              echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars(getCSRFToken()) . "'>";
+              echo "<input type='hidden' name='base_id' value='" . htmlspecialchars($base['id']) . "'>";
+              echo "<input type='text' name='base_name' value='" . htmlspecialchars($base['base_name']) . "' required>";
+              echo "<input type='submit' name='edit_base' value='Edit'>";
+              echo "</form> ";
+              echo "<form style='display:inline;' method='post' action='admin.php' onsubmit='return confirm(\"Are you sure?\");'>";
+              echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars(getCSRFToken()) . "'>";
+              echo "<input type='hidden' name='base_id' value='" . htmlspecialchars($base['id']) . "'>";
+              echo "<input type='submit' name='delete_base' value='Delete'>";
+              echo "</form>";
+              echo "</td>";
+              echo "</tr>";
+          }
+          echo "</tbody></table>";
+      } else {
+          echo "<p>No bases found.</p>";
       }
-      echo "</table>";
-  } else {
-      echo "<p>No audit logs found.</p>";
-  }
-  ?>
-</section>
+    ?>
+  </section>
+  <section>
+    <h3>Audit Trail</h3>
+    <?php
+      $stmt = $pdo->query("SELECT a.*, u.username FROM audit_trail a JOIN users u ON a.user_id = u.id ORDER BY a.created_at DESC LIMIT 50");
+      $auditLogs = $stmt->fetchAll();
+      if ($auditLogs) {
+          echo "<table>";
+          echo "<thead><tr><th>Timestamp</th><th>User</th><th>Flight ID</th><th>Action</th><th>Details</th></tr></thead><tbody>";
+          foreach ($auditLogs as $log) {
+              echo "<tr>";
+              echo "<td>" . htmlspecialchars($log['created_at']) . "</td>";
+              echo "<td>" . htmlspecialchars($log['username']) . "</td>";
+              echo "<td>" . htmlspecialchars($log['flight_id']) . "</td>";
+              echo "<td>" . htmlspecialchars($log['action']) . "</td>";
+              echo "<td>" . htmlspecialchars($log['details']) . "</td>";
+              echo "</tr>";
+          }
+          echo "</tbody></table>";
+      } else {
+          echo "<p>No audit logs found.</p>";
+      }
+    ?>
+  </section>
+</div>
 <?php include('footer.php'); ?>

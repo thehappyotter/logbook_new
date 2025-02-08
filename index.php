@@ -42,27 +42,32 @@ if (isset($_SESSION['user_id'])) {
     $nvg_hours = floor($nvg_minutes / 60);
     $nvg_remaining_minutes = $nvg_minutes % 60;
 
+    echo "<div class='flight-entry-container'>";
     echo "<form method='get' action='index.php' style='margin-bottom:20px;'>";
+    echo "<div class='form-group'>";
     echo "<label for='stats_range'><strong>Show statistics for:</strong></label> ";
     echo "<select name='stats_range' id='stats_range'>";
     echo "<option value='last7'" . ($selected_range=='last7' ? " selected" : "") . ">Last 7 days</option>";
     echo "<option value='month'" . ($selected_range=='month' ? " selected" : "") . ">Calendar Month</option>";
     echo "<option value='year'" . ($selected_range=='year' ? " selected" : "") . ">Year</option>";
     echo "<option value='all'" . ($selected_range=='all' ? " selected" : "") . ">All Time</option>";
-    echo "</select> ";
+    echo "</select>";
+    echo "</div>";
+    echo "<div class='form-group'>";
     echo "<input type='submit' value='Update'>";
+    echo "</div>";
     echo "</form>";
 
     echo "<div id='statsContainer' style='margin-bottom: 20px;'>";
-        echo "<div id='statsHeader' style='cursor: pointer; background: #ccc; padding: 5px;'>";
-            echo "<h3 style='display: inline-block; margin: 0;'>Your Flight Statistics (" . ucfirst($selected_range) . ")</h3> ";
-            echo "<span id='toggleIcon' style='float: right;'>[-]</span>";
-        echo "</div>";
-        echo "<div id='statsContent' style='border: 1px solid #ccc; padding: 15px; background: #eef;'>";
-            echo "<p><strong>Total Flights:</strong> " . htmlspecialchars($stats['total_flights']) . "</p>";
-            echo "<p><strong>Total Flight Time:</strong> " . htmlspecialchars($stats['total_flight_time'] ?: '00:00:00') . "</p>";
-            echo "<p><strong>Total NVG Time:</strong> " . $nvg_hours . " hours " . $nvg_remaining_minutes . " minutes</p>";
-        echo "</div>";
+    echo "<div id='statsHeader' style='cursor: pointer; background: #ccc; padding: 5px;'>";
+    echo "<h3 style='display: inline-block; margin: 0;'>Your Flight Statistics (" . ucfirst($selected_range) . ")</h3> ";
+    echo "<span id='toggleIcon' style='float: right;'>[-]</span>";
+    echo "</div>";
+    echo "<div id='statsContent' style='border: 1px solid #ccc; padding: 15px; background: #eef;'>";
+    echo "<p><strong>Total Flights:</strong> " . htmlspecialchars($stats['total_flights']) . "</p>";
+    echo "<p><strong>Total Flight Time:</strong> " . htmlspecialchars($stats['total_flight_time'] ?: '00:00:00') . "</p>";
+    echo "<p><strong>Total NVG Time:</strong> " . $nvg_hours . " hours " . $nvg_remaining_minutes . " minutes</p>";
+    echo "</div>";
     echo "</div>";
 
     $stmt = $pdo->prepare("SELECT * FROM flights WHERE user_id = ? ORDER BY flight_date DESC");
@@ -74,7 +79,7 @@ if (isset($_SESSION['user_id'])) {
     echo "<h2>Your Flight Log</h2>";
     if ($flights) {
         echo "<table>";
-        echo "<tr>
+        echo "<thead><tr>
                 <th>Date</th>
                 <th>Aircraft</th>
                 <th>From</th>
@@ -82,11 +87,10 @@ if (isset($_SESSION['user_id'])) {
                 <th>Duration</th>
                 <th>Notes</th>
                 <th>Actions</th>
-              </tr>";
+              </tr></thead><tbody>";
         foreach ($flights as $flight) {
             echo "<tr>";
             echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
-
             if ($flight['aircraft_id'] !== null) {
                 $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
                 $stmt2->execute([$flight['aircraft_id']]);
@@ -96,7 +100,6 @@ if (isset($_SESSION['user_id'])) {
             } else {
                 echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
             }
-
             echo "<td>" . htmlspecialchars($flight['flight_from']) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_to']) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
@@ -113,13 +116,16 @@ if (isset($_SESSION['user_id'])) {
             echo "</td>";
             echo "</tr>";
         }
-        echo "</table>";
+        echo "</tbody></table>";
     } else {
         echo "<p>No flight records found. Start by adding a new flight.</p>";
     }
+    echo "</div>";
 } else {
+    echo "<div class='flight-entry-container'>";
     echo "<h2>Welcome to the Flight Log</h2>";
     echo "<p>Please <a href='login.php'>login</a> or <a href='register.php'>register</a> to view your flight records and statistics.</p>";
+    echo "</div>";
 }
 include('footer.php');
 ?>
@@ -127,14 +133,12 @@ include('footer.php');
 document.addEventListener("DOMContentLoaded", function() {
     var statsContent = document.getElementById('statsContent');
     var toggleIcon = document.getElementById('toggleIcon');
-
     if (statsContent && toggleIcon) {
         var collapsed = localStorage.getItem('statsCollapsed');
         if (collapsed === 'true') {
             statsContent.style.display = 'none';
             toggleIcon.textContent = '[+]';
         }
-
         document.getElementById('statsHeader').addEventListener('click', function() {
             if (statsContent.style.display === 'none') {
                 statsContent.style.display = 'block';

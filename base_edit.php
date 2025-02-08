@@ -24,10 +24,11 @@ if (!$base) {
 
 $error = [];
 $success = [];
+$csrf_token = getCSRFToken();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
-        $error[] = "Invalid request. Please try again.";
+        $error[] = "Invalid CSRF token.";
     } else {
         $base_name = trim($_POST['base_name']);
         $base_code = trim($_POST['base_code'] ?? '');
@@ -47,22 +48,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 include('header.php');
 ?>
-<h2>Edit Base</h2>
-<?php
-foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
-foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
-?>
-<form method="post" action="base_edit.php?id=<?php echo $base_id; ?>">
-    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
-    <label for="base_name">Base Name:</label>
-    <input type="text" name="base_name" id="base_name" value="<?php echo htmlspecialchars($base['base_name']); ?>" required>
-    
-    <label for="base_code">Base Code:</label>
-    <input type="text" name="base_code" id="base_code" value="<?php echo htmlspecialchars($base['base_code']); ?>">
-    
-    <label for="description">Description:</label>
-    <textarea name="description" id="description"><?php echo htmlspecialchars($base['description']); ?></textarea>
-    
-    <input type="submit" value="Update Base">
-</form>
+<div class="flight-entry-container">
+  <h2>Edit Base</h2>
+  <?php
+    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
+    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
+  ?>
+  <form method="post" action="base_edit.php?id=<?php echo $base_id; ?>">
+    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+    <div class="form-group">
+      <label for="base_name">Base Name:</label>
+      <input type="text" name="base_name" id="base_name" value="<?php echo htmlspecialchars($base['base_name']); ?>" required>
+    </div>
+    <div class="form-group">
+      <label for="base_code">Base Code:</label>
+      <input type="text" name="base_code" id="base_code" value="<?php echo htmlspecialchars($base['base_code']); ?>">
+    </div>
+    <div class="form-group">
+      <label for="description">Description:</label>
+      <textarea name="description" id="description"><?php echo htmlspecialchars($base['description']); ?></textarea>
+    </div>
+    <div class="form-group">
+      <input type="submit" value="Update Base">
+    </div>
+  </form>
+</div>
 <?php include('footer.php'); ?>
