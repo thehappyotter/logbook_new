@@ -9,29 +9,42 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-// Prebuild the role options for the Flight Role Breakdown default row.
-$roleOptions = '';
-if (isset($_SESSION['default_role']) && $_SESSION['default_role'] === 'crew') {
-    // For crew, default to "Crew"
-    $roleOptions .= '<option value="Crew" selected>Crew</option>';
-    $roleOptions .= '<option value="Day P1">Day P1</option>';
-    $roleOptions .= '<option value="Day P2">Day P2</option>';
-    $roleOptions .= '<option value="Day Pilot under training">Day Pilot under training</option>';
-    $roleOptions .= '<option value="Night P1">Night P1</option>';
-    $roleOptions .= '<option value="Night P2">Night P2</option>';
-    $roleOptions .= '<option value="Night Pilot under training">Night Pilot under training</option>';
-    $roleOptions .= '<option value="Simulator">Simulator</option>';
-} else {
-    // Otherwise, default to "Day P1"
-    $roleOptions .= '<option value="Day P1" selected>Day P1</option>';
-    $roleOptions .= '<option value="Day P2">Day P2</option>';
-    $roleOptions .= '<option value="Day Pilot under training">Day Pilot under training</option>';
-    $roleOptions .= '<option value="Night P1">Night P1</option>';
-    $roleOptions .= '<option value="Night P2">Night P2</option>';
-    $roleOptions .= '<option value="Night Pilot under training">Night Pilot under training</option>';
-    $roleOptions .= '<option value="Simulator">Simulator</option>';
-    $roleOptions .= '<option value="Crew">Crew</option>';
+// Fetch master list of aircraft.
+$stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
+$aircraft_list = $stmt->fetchAll();
+
+// Fetch bases from the database (ordered by base_name).
+$stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
+$bases = $stmtBases->fetchAll();
+
+// Re-query the current user's default_base and default_role from the database.
+// This ensures that any changes (e.g., via My Account) are applied.
+$stmtUser = $pdo->prepare("SELECT default_base, default_role FROM users WHERE id = ?");
+$stmtUser->execute([$_SESSION['user_id']]);
+$userData = $stmtUser->fetch();
+$default_base = $userData['default_base'] ?? '';
+$default_role = $userData['default_role'] ?? 'pilot';
+
+// If no default base is set and there are bases available, use the first one.
+if (!$default_base && count($bases) > 0) {
+    $default_base = $bases[0]['id'];
 }
+
+// Determine the default role text for the breakdown default row.
+// If the user's default_role is crew, default to "Crew"; otherwise default to "Day P1".
+$defaultRowRole = ($default_role === 'crew') ? "Crew" : "Day P1";
+
+// Build the complete set of role options for the dropdown.
+// The option whose value matches $defaultRowRole will have the "selected" attribute.
+$roleOptions = '
+<option value="Day P1"' . ($defaultRowRole == "Day P1" ? ' selected' : '') . '>Day P1</option>
+<option value="Day P2"' . ($defaultRowRole == "Day P2" ? ' selected' : '') . '>Day P2</option>
+<option value="Day Pilot under training"' . ($defaultRowRole == "Day Pilot under training" ? ' selected' : '') . '>Day Pilot under training</option>
+<option value="Night P1"' . ($defaultRowRole == "Night P1" ? ' selected' : '') . '>Night P1</option>
+<option value="Night P2"' . ($defaultRowRole == "Night P2" ? ' selected' : '') . '>Night P2</option>
+<option value="Night Pilot under training"' . ($defaultRowRole == "Night Pilot under training" ? ' selected' : '') . '>Night Pilot under training</option>
+<option value="Simulator"' . ($defaultRowRole == "Simulator" ? ' selected' : '') . '>Simulator</option>
+<option value="Crew"' . ($defaultRowRole == "Crew" ? ' selected' : '') . '>Crew</option>';
 
 $error = [];
 $success = [];
@@ -44,7 +57,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $flight_date = $_POST['flight_date'];
 
         // Aircraft field.
-        // If the "Other" checkbox is checked, use manually entered values.
         if (isset($_POST['aircraft_other_checkbox'])) {
             $aircraft_id = null;
             $aircraft_type = trim($_POST['aircraft_type']);
@@ -123,26 +135,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 }
-
-// Fetch master list of aircraft.
-$stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
-$aircraft_list = $stmt->fetchAll();
-
-// Fetch bases from the database.
-$stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
-$bases = $stmtBases->fetchAll();
-
-// Fetch current user's default base.
-$stmtUser = $pdo->prepare("SELECT default_base FROM users WHERE id = ?");
-$stmtUser->execute([$_SESSION['user_id']]);
-$user = $stmtUser->fetch();
-$default_base = $user['default_base'] ?? '';
-if (!$default_base && count($bases) > 0) {
-    $default_base = $bases[0]['id'];
-}
-
-include('header.php');
 ?>
+<?php include('header.php'); ?>
 <div class="flight-entry-container">
   <h2>Enter New Flight Record</h2>
   <?php 
@@ -256,7 +250,7 @@ include('header.php');
     
     <fieldset>
       <legend>Flight Role Breakdown</legend>
-      <p>Detail the breakdown of your flight time by role (in minutes). The first row is calculated automatically.</p>
+      <p>Detail the breakdown of your flight time by role (in minutes). The first row is auto‑calculated based on your rotors times. You may change the role if needed.</p>
       <table id="breakdownTable" class="breakdown-table">
         <thead>
           <tr>
@@ -268,23 +262,14 @@ include('header.php');
         <tbody>
           <tr>
             <td>
-              <!-- Set the default row's role based on session default (or "Day P1" if not crew) -->
               <select name="role[]" id="defaultRoleSelect">
-                <?php
-                $defaultRole = ($_SESSION['default_role'] ?? 'pilot') === 'crew' ? "Crew" : "Day P1";
-                // We force the default row to be the default role.
-                echo '<option value="' . $defaultRole . '" selected>' . $defaultRole . '</option>';
-                ?>
+                <?php echo $roleOptions; ?>
               </select>
             </td>
             <td>
-              <!-- This field is read-only because it is auto-calculated -->
               <input type="number" name="duration[]" id="defaultDuration" min="0" placeholder="Minutes" readonly>
             </td>
-            <td>
-              <!-- No remove button for the default row -->
-              &nbsp;
-            </td>
+            <td>&nbsp;</td>
           </tr>
         </tbody>
       </table>
@@ -297,49 +282,9 @@ include('header.php');
   </form>
 </div>
 
-<!-- Include jQuery from Google's CDN (without an integrity attribute) -->
+<!-- Include jQuery from Google's CDN without integrity attribute -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
-// Function to recalculate and update the default Flight Role Breakdown row.
-// The default row's duration is set to (total flight minutes - sum of additional rows).
-function recalcBreakdown() {
-    const rotorsStart = document.getElementById('rotors_start').value;
-    const rotorsStop = document.getElementById('rotors_stop').value;
-    if (!rotorsStart || !rotorsStop) return;
-    
-    let start = new Date("1970-01-01T" + rotorsStart + "Z");
-    let stop = new Date("1970-01-01T" + rotorsStop + "Z");
-    let totalMinutes = (stop - start) / 60000;
-    if (totalMinutes < 0) { totalMinutes += 1440; }
-    
-    const tbody = document.getElementById("breakdownTable").querySelector("tbody");
-    const rows = tbody.getElementsByTagName("tr");
-    let additionalMinutes = 0;
-    
-    // Sum all rows except the first one (which is auto-calculated)
-    for (let i = 1; i < rows.length; i++) {
-        const input = rows[i].querySelector("input[name='duration[]']");
-        if (input) {
-            additionalMinutes += parseInt(input.value) || 0;
-        }
-    }
-    
-    let defaultMinutes = totalMinutes - additionalMinutes;
-    if (defaultMinutes < 0) defaultMinutes = 0;
-    
-    // Update the default row's duration input.
-    document.getElementById('defaultDuration').value = defaultMinutes;
-}
-
-// When additional breakdown rows change, recalc the breakdown.
-$(document).on("change", "input[name='duration[]']", function() {
-    // If this input is not the default (first row), recalc.
-    if ($(this).closest("tr").index() > 0) {
-        recalcBreakdown();
-    }
-});
-
-// jQuery event bindings for toggling manual inputs.
 $(document).ready(function() {
   $("#aircraft_other_checkbox").change(function() {
     $("#aircraft_other_div").toggle(this.checked);
@@ -353,7 +298,44 @@ $(document).ready(function() {
     $("#to_other_div").toggle(this.checked);
   });
 });
-  
+
+// Function to recalculate and update the default breakdown row.
+// It calculates the total flight time in minutes based on rotors times,
+// subtracts any manually entered durations in additional rows, and updates the default row.
+function recalcBreakdown() {
+    const rotorsStart = document.getElementById('rotors_start').value;
+    const rotorsStop = document.getElementById('rotors_stop').value;
+    if (!rotorsStart || !rotorsStop) return;
+    
+    let start = new Date("1970-01-01T" + rotorsStart + "Z");
+    let stop = new Date("1970-01-01T" + rotorsStop + "Z");
+    let totalMinutes = (stop - start) / 60000;
+    if (totalMinutes < 0) { totalMinutes += 1440; }
+    
+    const $tbody = $("#breakdownTable tbody");
+    let additionalMinutes = 0;
+    
+    // Sum the durations from all additional rows (rows with index > 0)
+    $tbody.find("tr").each(function(index) {
+        if (index > 0) {
+            const val = parseInt($(this).find("input[name='duration[]']").val()) || 0;
+            additionalMinutes += val;
+        }
+    });
+    
+    let defaultMinutes = totalMinutes - additionalMinutes;
+    if (defaultMinutes < 0) defaultMinutes = 0;
+    
+    $("#defaultDuration").val(defaultMinutes);
+}
+
+// When an additional row's duration changes, recalc the breakdown.
+$(document).on("change", "input[name='duration[]']", function() {
+    if ($(this).closest("tr").index() > 0) {
+        recalcBreakdown();
+    }
+});
+
 // Function to add an additional breakdown row.
 function addRow() {
     const tbody = document.getElementById("breakdownTable").querySelector("tbody");
@@ -362,7 +344,6 @@ function addRow() {
     const cell2 = newRow.insertCell(1);
     const cell3 = newRow.insertCell(2);
     
-    // Create a dropdown for the role with the same options as before.
     let selectHTML = '<select name="role[]">';
     selectHTML += <?php echo json_encode($roleOptions); ?>;
     selectHTML += '</select>';
@@ -370,7 +351,6 @@ function addRow() {
     cell2.innerHTML = '<input type="number" name="duration[]" min="0" placeholder="Minutes">';
     cell3.innerHTML = '<button type="button" onclick="removeRow(this);">Remove</button>';
     
-    // Recalculate breakdown when a new row is added.
     recalcBreakdown();
 }
 
@@ -381,5 +361,4 @@ function removeRow(btn) {
     recalcBreakdown();
 }
 </script>
-
 <?php include('footer.php'); ?>
