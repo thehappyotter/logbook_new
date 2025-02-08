@@ -9,6 +9,7 @@ if (file_exists('installed.lock')) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // (Optional: CSRF token verification could be added here.)
     $db_host     = trim($_POST['db_host']);
     $db_username = trim($_POST['db_username']);
     $db_password = $_POST['db_password'];
@@ -67,6 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         echo "<p>Error: " . htmlspecialchars($e->getMessage()) . "</p>";
     }
 } else {
+    require_once('functions.php');
     ?>
     <!DOCTYPE html>
     <html lang="en">

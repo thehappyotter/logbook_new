@@ -2,13 +2,13 @@
 // flight_edit.php
 session_start();
 require_once('db.php');
+require_once('functions.php');
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
 }
 
-// Function to log audit events.
 function logAudit($pdo, $user_id, $flight_id, $action, $details = "") {
     $stmt = $pdo->prepare("INSERT INTO audit_trail (user_id, flight_id, action, details) VALUES (?, ?, ?, ?)");
     $stmt->execute([$user_id, $flight_id, $action, $details]);
@@ -27,54 +27,56 @@ if (!$flight) {
     die("Flight record not found.");
 }
 
-// Only allow the owner or admin.
 if ($flight['user_id'] != $_SESSION['user_id'] && $_SESSION['role'] != 'admin') {
     die("Unauthorized access.");
 }
 
-// Retrieve aircraft list.
 $stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
 $aircraft_list = $stmt->fetchAll();
 
-$error = '';
-$success = '';
+$error = [];
+$success = [];
+$csrf_token = getCSRFToken();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $flight_date = $_POST['flight_date'];
-    $aircraft_id = $_POST['aircraft_id'];
-    $flight_from = $_POST['flight_from'];
-    $flight_to   = $_POST['flight_to'];
-    $capacity    = $_POST['capacity'];
-    $pilot_type  = $_POST['pilot_type'];
-    $crew_names  = $_POST['crew_names'];
-    $rotors_start = $_POST['rotors_start'];
-    $rotors_stop  = $_POST['rotors_stop'];
-    $night_vision = isset($_POST['night_vision']) ? 1 : 0;
-    $night_vision_duration = $_POST['night_vision_duration'];
-    $takeoffs    = $_POST['takeoffs'];
-    $landings    = $_POST['landings'];
-    $notes       = $_POST['notes'];
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid request. Please try again.";
+    } else {
+        $flight_date = $_POST['flight_date'];
+        $aircraft_id = $_POST['aircraft_id'];
+        $flight_from = $_POST['flight_from'];
+        $flight_to   = $_POST['flight_to'];
+        $capacity    = $_POST['capacity'];
+        $pilot_type  = $_POST['pilot_type'];
+        $crew_names  = $_POST['crew_names'];
+        $rotors_start = $_POST['rotors_start'];
+        $rotors_stop  = $_POST['rotors_stop'];
+        $night_vision = isset($_POST['night_vision']) ? 1 : 0;
+        $night_vision_duration = $_POST['night_vision_duration'];
+        $takeoffs    = $_POST['takeoffs'];
+        $landings    = $_POST['landings'];
+        $notes       = $_POST['notes'];
 
-    try {
-        $start = new DateTime($rotors_start);
-        $stop  = new DateTime($rotors_stop);
-    } catch (Exception $e) {
-        $error = "Invalid time format.";
-    }
-    if (!$error) {
-        $interval = $start->diff($stop);
-        $flight_duration = $interval->format('%H:%I:%S');
+        try {
+            $start = new DateTime($rotors_start);
+            $stop  = new DateTime($rotors_stop);
+        } catch (Exception $e) {
+            $error[] = "Invalid time format.";
+        }
+        if (empty($error)) {
+            $interval = $start->diff($stop);
+            $flight_duration = $interval->format('%H:%I:%S');
 
-        $stmt = $pdo->prepare("UPDATE flights SET flight_date = ?, aircraft_id = ?, flight_from = ?, flight_to = ?, capacity = ?, pilot_type = ?, crew_names = ?, rotors_start = ?, rotors_stop = ?, night_vision = ?, night_vision_duration = ?, takeoffs = ?, landings = ?, notes = ?, flight_duration = ? WHERE id = ?");
-        if ($stmt->execute([$flight_date, $aircraft_id, $flight_from, $flight_to, $capacity, $pilot_type, $crew_names, $rotors_start, $rotors_stop, $night_vision, $night_vision_duration, $takeoffs, $landings, $notes, $flight_duration, $flight_id])) {
-            logAudit($pdo, $_SESSION['user_id'], $flight_id, 'edit', 'Flight record updated.');
-            $success = "Flight record updated successfully.";
-            // Refresh the flight data.
-            $stmt = $pdo->prepare("SELECT * FROM flights WHERE id = ?");
-            $stmt->execute([$flight_id]);
-            $flight = $stmt->fetch();
-        } else {
-            $error = "Failed to update flight record.";
+            $stmt = $pdo->prepare("UPDATE flights SET flight_date = ?, aircraft_id = ?, flight_from = ?, flight_to = ?, capacity = ?, pilot_type = ?, crew_names = ?, rotors_start = ?, rotors_stop = ?, night_vision = ?, night_vision_duration = ?, takeoffs = ?, landings = ?, notes = ?, flight_duration = ? WHERE id = ?");
+            if ($stmt->execute([$flight_date, $aircraft_id, $flight_from, $flight_to, $capacity, $pilot_type, $crew_names, $rotors_start, $rotors_stop, $night_vision, $night_vision_duration, $takeoffs, $landings, $notes, $flight_duration, $flight_id])) {
+                logAudit($pdo, $_SESSION['user_id'], $flight_id, 'edit', 'Flight record updated.');
+                $success[] = "Flight record updated successfully.";
+                $stmt = $pdo->prepare("SELECT * FROM flights WHERE id = ?");
+                $stmt->execute([$flight_id]);
+                $flight = $stmt->fetch();
+            } else {
+                $error[] = "Failed to update flight record.";
+            }
         }
     }
 }
@@ -82,9 +84,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 include('header.php');
 ?>
 <h2>Edit Flight Record</h2>
-<?php if ($error) { echo "<p class='error'>" . htmlspecialchars($error) . "</p>"; } ?>
-<?php if ($success) { echo "<p class='success'>" . htmlspecialchars($success) . "</p>"; } ?>
+<?php 
+foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
+foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
+?>
 <form method="post" action="flight_edit.php?id=<?php echo htmlspecialchars($flight_id); ?>">
+  <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
   <label for="flight_date">Date:</label>
   <input type="date" name="flight_date" value="<?php echo htmlspecialchars($flight['flight_date']); ?>" required>
   

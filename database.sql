@@ -36,8 +36,6 @@ CREATE TABLE IF NOT EXISTS aircraft (
 );
 
 -- Table: flights  
--- (Note: aircraft_id is allowed to be NULL so that manual aircraft entries work;
--- custom_aircraft_details stores the manually entered info.)
 CREATE TABLE IF NOT EXISTS flights (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
@@ -61,7 +59,7 @@ CREATE TABLE IF NOT EXISTS flights (
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
--- Table: flight_breakdown (stores breakdown of flight time by role)
+-- Table: flight_breakdown
 CREATE TABLE IF NOT EXISTS flight_breakdown (
   id INT AUTO_INCREMENT PRIMARY KEY,
   flight_id INT NOT NULL,

@@ -2,17 +2,26 @@
 // flight_delete.php
 session_start();
 require_once('db.php');
+require_once('functions.php');
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
 }
 
-if (!isset($_GET['id'])) {
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    die("Invalid request method.");
+}
+
+if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+    die("Invalid request.");
+}
+
+if (!isset($_POST['id'])) {
     die("Flight ID not specified.");
 }
 
-$flight_id = $_GET['id'];
+$flight_id = $_POST['id'];
 
 $stmt = $pdo->prepare("SELECT * FROM flights WHERE id = ?");
 $stmt->execute([$flight_id]);
@@ -28,7 +37,6 @@ if ($flight['user_id'] != $_SESSION['user_id'] && $_SESSION['role'] != 'admin') 
 
 $stmt = $pdo->prepare("DELETE FROM flights WHERE id = ?");
 if ($stmt->execute([$flight_id])) {
-    // Log the deletion.
     $stmt = $pdo->prepare("INSERT INTO audit_trail (user_id, flight_id, action, details) VALUES (?, ?, ?, ?)");
     $stmt->execute([$_SESSION['user_id'], $flight_id, 'delete', 'Flight record deleted.']);
     header("Location: index.php");

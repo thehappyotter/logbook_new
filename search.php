@@ -2,6 +2,7 @@
 // search.php
 session_start();
 require_once('db.php');
+require_once('functions.php');
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -42,15 +43,15 @@ if (isset($_GET['end_date']) && trim($_GET['end_date']) !== "") {
 
 $whereSQL = implode(" AND ", $whereClauses);
 
-// Count total results.
 $stmt = $pdo->prepare("SELECT COUNT(*) FROM flights f JOIN aircraft a ON f.aircraft_id = a.id WHERE $whereSQL");
 $stmt->execute($params);
 $totalResults = $stmt->fetchColumn();
 
-// Retrieve the flight records with limit and offset.
 $stmt = $pdo->prepare("SELECT f.*, a.registration FROM flights f JOIN aircraft a ON f.aircraft_id = a.id WHERE $whereSQL ORDER BY $sort LIMIT $perPage OFFSET $offset");
 $stmt->execute($params);
 $flights = $stmt->fetchAll();
+
+$csrf_token = getCSRFToken();
 
 include('header.php');
 ?>
@@ -80,13 +81,16 @@ if ($flights) {
         echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
         echo "<td>";
         echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
-        echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
+        echo "<form method='post' action='flight_delete.php' style='display:inline;' onsubmit='return confirm(\"Are you sure?\");'>";
+        echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars($csrf_token) . "'>";
+        echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
+        echo "<input type='submit' value='Delete'>";
+        echo "</form>";
         echo "</td>";
         echo "</tr>";
     }
     echo "</table>";
     
-    // Pagination links.
     $totalPages = ceil($totalResults / $perPage);
     for ($i = 1; $i <= $totalPages; $i++) {
         if ($i == $page) {
