@@ -1,127 +1,157 @@
-/* style.css */
-body {
-    font-family: Arial, sans-serif;
+/* Global resets */
+* {
     margin: 0;
     padding: 0;
+    box-sizing: border-box;
+  }
+  
+  /* Base body styles */
+  body {
+    font-family: Arial, sans-serif;
     background: #f5f5f5;
-}
-
-header {
+    line-height: 1.6;
+  }
+  
+  /* Container wrapper for the entire site */
+  .wrapper {
+    max-width: 1200px;  /* Adjust this value for wider or narrower layouts */
+    margin: 0 auto;
+    padding: 0 15px;
+  }
+  
+  /* Header */
+  header {
     background: #003366;
     color: #ffcc00;
+    padding: 10px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 20px;
     flex-wrap: wrap;
-}
-
-header .main-menu a,
-header .user-menu a {
+  }
+  
+  header .main-menu a,
+  header .user-menu a {
     color: #ffcc00;
     text-decoration: none;
     margin-right: 15px;
-}
-
-header .user-menu span {
+  }
+  
+  header .user-menu span {
     margin-right: 15px;
-}
-
-main {
+  }
+  
+  /* Main content area */
+  main {
     padding: 20px;
-    margin-bottom: 60px;
-}
-
-footer {
+    margin-bottom: 60px; /* Leave space for the footer */
+  }
+  
+  /* Footer */
+  footer {
     background: #003366;
     color: #ffcc00;
     text-align: center;
     padding: 10px 20px;
-    position: fixed;
+    position: fixed;  /* For desktop; see media query for mobile adjustments */
     width: 100%;
     bottom: 0;
-}
-
-/* Container for page content */
-.flight-entry-container {
-    background: #fff;
-    padding: 20px;
-    margin: 20px auto;
+  }
+  
+  /* Utility classes */
+  .error {
+    color: red;
+    margin-bottom: 10px;
+  }
+  
+  .success {
+    color: green;
+    margin-bottom: 10px;
+  }
+  
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+  }
+  
+  table, th, td {
     border: 1px solid #ccc;
-    max-width: 800px;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-/* Form styles */
-.form-group {
-    margin-bottom: 15px;
-}
-
-form label {
+  }
+  
+  th, td {
+    padding: 10px;
+    text-align: left;
+  }
+  
+  /* Forms */
+  form label {
     display: block;
     margin-top: 10px;
-}
-
-form input[type="text"],
-form input[type="password"],
-form input[type="email"],
-form input[type="date"],
-form input[type="time"],
-form input[type="number"],
-form select,
-form textarea {
+  }
+  
+  form input[type="text"],
+  form input[type="password"],
+  form input[type="email"],
+  form input[type="date"],
+  form input[type="time"],
+  form input[type="number"],
+  form select,
+  form textarea {
     width: 100%;
     padding: 8px;
-    box-sizing: border-box;
-    font-size: 1rem;
-}
-
-form input[type="submit"],
-button {
+    margin-top: 5px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+  }
+  
+  form input[type="submit"] {
     margin-top: 15px;
     padding: 10px 20px;
     background: #003366;
     color: #ffcc00;
     border: none;
+    border-radius: 3px;
     cursor: pointer;
-}
-
-/* Explicit styling for select and option */
-select {
-    color: #333;
-    background-color: #fff;
+  }
+  
+  /* Flight entry container */
+  .flight-entry-container {
+    background: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  }
+  
+  /* Fieldset styling */
+  fieldset {
+    margin-bottom: 20px;
     border: 1px solid #ccc;
-}
-
-option {
-    color: #333;
-    background-color: #fff;
-}
-
-/* Table styles */
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-bottom: 15px;
-}
-
-table, th, td {
-    border: 1px solid #ccc;
-}
-
-th, td {
     padding: 10px;
-    text-align: left;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
+    border-radius: 5px;
+  }
+  
+  fieldset legend {
+    font-weight: bold;
+    padding: 0 10px;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
     header {
-        flex-direction: column;
-        align-items: flex-start;
+      flex-direction: column;
+      align-items: flex-start;
     }
+    
     footer {
-        position: static;
+      position: static;
+      margin-top: 20px;
     }
-}
+    
+    .wrapper {
+      padding: 0 10px;
+    }
+  }
+  

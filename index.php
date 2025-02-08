@@ -1,12 +1,14 @@
 <?php
 // index.php
-include('header.php');
+session_start();
 require_once('db.php');
 require_once('functions.php');
 
+include('header.php');
+
 if (isset($_SESSION['user_id'])) {
 
-    // Process the statistics time range selection.
+    // Process statistics time range selection.
     if (isset($_GET['stats_range'])) {
         $_SESSION['stats_range'] = $_GET['stats_range'];
     }
@@ -28,9 +30,9 @@ if (isset($_SESSION['user_id'])) {
             break;
     }
 
-    // Pagination variables
+    // Pagination variables.
     $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-    $perPage = 10;  // records per page
+    $perPage = 10; // Records per page.
     $offset = ($page - 1) * $perPage;
 
     // Calculate statistics.
@@ -47,7 +49,7 @@ if (isset($_SESSION['user_id'])) {
     $stmtStats->execute([$_SESSION['user_id']]);
     $stats = $stmtStats->fetch();
 
-    $totalNVGTime = $stats['total_nvg_time'] ? $stats['total_nvg_time'] : 0;
+    $totalNVGTime     = $stats['total_nvg_time']     ? $stats['total_nvg_time']     : 0;
     $totalNVGTakeoffs = $stats['total_nvg_takeoffs'] ? $stats['total_nvg_takeoffs'] : 0;
     $totalNVGLandings = $stats['total_nvg_landings'] ? $stats['total_nvg_landings'] : 0;
 
@@ -87,7 +89,7 @@ if (isset($_SESSION['user_id'])) {
     $stmt->execute();
     $flights = $stmt->fetchAll();
 
-    // Get total number of records for pagination.
+    // Get the total number of records for pagination.
     $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM flights WHERE user_id = ? $date_filter");
     $stmtCount->execute([$_SESSION['user_id']]);
     $totalResults = $stmtCount->fetchColumn();
@@ -101,20 +103,12 @@ if (isset($_SESSION['user_id'])) {
                 <th>From</th>
                 <th>To</th>
                 <th>Duration</th>
-                <th>NVG Time</th>
-                <th>NVG Takeoffs</th>
-                <th>NVG Landings</th>
-                <th>Sim IF</th>
-                <th>Act IF</th>
-                <th>ILS Approaches</th>
-                <th>RNP</th>
-                <th>NPA</th>
                 <th>Actions</th>
               </tr></thead><tbody>";
         foreach ($flights as $flight) {
             echo "<tr>";
             echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
-            // Aircraft: if aircraft_id exists, look up the registration; else use custom details.
+            // Aircraft: if an aircraft_id exists, look up the registration; otherwise, use custom details.
             if ($flight['aircraft_id'] !== null) {
                 $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
                 $stmt2->execute([$flight['aircraft_id']]);
@@ -124,7 +118,7 @@ if (isset($_SESSION['user_id'])) {
             } else {
                 echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
             }
-            // From: if numeric, look up base name.
+            // "From": if numeric, look up the base name; otherwise, display the value.
             $from = $flight['flight_from'];
             if (is_numeric($from)) {
                 $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -135,7 +129,7 @@ if (isset($_SESSION['user_id'])) {
                 }
             }
             echo "<td>" . htmlspecialchars($from) . "</td>";
-            // To: if numeric, look up base name.
+            // "To": if numeric, look up the base name; otherwise, display the value.
             $to = $flight['flight_to'];
             if (is_numeric($to)) {
                 $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
@@ -147,24 +141,16 @@ if (isset($_SESSION['user_id'])) {
             }
             echo "<td>" . htmlspecialchars($to) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['nvg_time']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['nvg_takeoffs']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['nvg_landings']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['sim_if']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['act_if']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['ils_approaches']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['rnp']) . "</td>";
-            echo "<td>" . htmlspecialchars($flight['npa']) . "</td>";
+            // Actions: include a "View Full Flight Data" link along with Edit and Delete.
             echo "<td>";
-            if ($flight['user_id'] == $_SESSION['user_id'] || $_SESSION['role'] == 'admin') {
-                echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
-                echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
-            }
+            echo "<a href='flight_view.php?id=" . $flight['id'] . "'>View Full Flight Data</a> | ";
+            echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
+            echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
             echo "</td>";
             echo "</tr>";
         }
         echo "</tbody></table>";
-      
+
         $totalPages = ceil($totalResults / $perPage);
         for ($i = 1; $i <= $totalPages; $i++) {
             if ($i == $page) {
@@ -185,20 +171,21 @@ if (isset($_SESSION['user_id'])) {
     echo "<p>Please <a href='login.php'>login</a> or <a href='register.php'>register</a> to view your flight records and statistics.</p>";
     echo "</div>";
 }
+
 include('footer.php');
 ?>
 <script>
 document.addEventListener("DOMContentLoaded", function(){
     var statsContent = document.getElementById('statsContent');
     var toggleIcon = document.getElementById('toggleIcon');
-    if(statsContent && toggleIcon){
+    if (statsContent && toggleIcon) {
         var collapsed = localStorage.getItem('statsCollapsed');
-        if(collapsed === 'true'){
+        if (collapsed === 'true') {
             statsContent.style.display = 'none';
             toggleIcon.textContent = '[+]';
         }
         document.getElementById('statsHeader').addEventListener('click', function(){
-            if(statsContent.style.display === 'none'){
+            if (statsContent.style.display === 'none') {
                 statsContent.style.display = 'block';
                 toggleIcon.textContent = '[-]';
                 localStorage.setItem('statsCollapsed', 'false');
