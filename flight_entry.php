@@ -9,16 +9,32 @@ if (!isset($_SESSION['user_id'])) {
     exit;
 }
 
-function logAudit($pdo, $user_id, $flight_id, $action, $details = "") {
-    $stmt = $pdo->prepare("INSERT INTO audit_trail (user_id, flight_id, action, details) VALUES (?, ?, ?, ?)");
-    $stmt->execute([$user_id, $flight_id, $action, $details]);
+// Prebuild the role options for the flight breakdown dropdown.
+$roleOptions = '';
+if ($_SESSION['default_role'] === 'crew') {
+    $roleOptions .= '<option value="Crew" selected>Crew</option>';
+    $roleOptions .= '<option value="Day P1">Day P1</option>';
+    $roleOptions .= '<option value="Day P2">Day P2</option>';
+    $roleOptions .= '<option value="Day Pilot under training">Day Pilot under training</option>';
+    $roleOptions .= '<option value="Night P1">Night P1</option>';
+    $roleOptions .= '<option value="Night P2">Night P2</option>';
+    $roleOptions .= '<option value="Night Pilot under training">Night Pilot under training</option>';
+    $roleOptions .= '<option value="Simulator">Simulator</option>';
+} else {
+    $roleOptions .= '<option value="Day P1" selected>Day P1</option>';
+    $roleOptions .= '<option value="Day P2">Day P2</option>';
+    $roleOptions .= '<option value="Day Pilot under training">Day Pilot under training</option>';
+    $roleOptions .= '<option value="Night P1">Night P1</option>';
+    $roleOptions .= '<option value="Night P2">Night P2</option>';
+    $roleOptions .= '<option value="Night Pilot under training">Night Pilot under training</option>';
+    $roleOptions .= '<option value="Simulator">Simulator</option>';
+    $roleOptions .= '<option value="Crew">Crew</option>';
 }
 
 $error = [];
 $success = [];
 $csrf_token = getCSRFToken();
 
-// Process form submission.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
         $error[] = "Invalid request. Please try again.";
@@ -26,7 +42,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $flight_date = $_POST['flight_date'];
 
         // Aircraft field.
-        // If the "Other" checkbox is checked, use the manually entered values.
         if (isset($_POST['aircraft_other_checkbox'])) {
             $aircraft_id = null;
             $aircraft_type = trim($_POST['aircraft_type']);
@@ -38,13 +53,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $custom_aircraft_details = "";
         }
 
-        // "From" field: use dropdown value unless checkbox is checked.
+        // "From" field.
         $flight_from = $_POST['from_select'];
         if (isset($_POST['from_other_checkbox'])) {
             $flight_from = trim($_POST['from_other']);
         }
 
-        // "To" field: use dropdown value unless checkbox is checked.
+        // "To" field.
         $flight_to = $_POST['to_select'];
         if (isset($_POST['to_other_checkbox'])) {
             $flight_to = trim($_POST['to_other']);
@@ -110,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
 $aircraft_list = $stmt->fetchAll();
 
-// Fetch bases from the database (ordered by base_name).
+// Fetch bases from the database.
 $stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
 $bases = $stmtBases->fetchAll();
 
@@ -128,8 +143,12 @@ include('header.php');
 <div class="flight-entry-container">
   <h2>Enter New Flight Record</h2>
   <?php 
-    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
-    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
+    foreach ($error as $msg) {
+        echo "<p class='error'>" . htmlspecialchars($msg) . "</p>";
+    }
+    foreach ($success as $msg) {
+        echo "<p class='success'>" . htmlspecialchars($msg) . "</p>";
+    }
   ?>
   <form method="post" action="flight_entry.php">
     <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
@@ -290,37 +309,24 @@ include('header.php');
   </form>
 </div>
 
+<!-- Include jQuery from Google's CDN without an integrity attribute -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+$(document).ready(function() {
   // Toggle the "Other" text input for the Aircraft field.
-  const aircraftCheckbox = document.querySelector("#aircraft_other_checkbox");
-  const aircraftOtherDiv = document.querySelector("#aircraft_other_div");
-  if (aircraftCheckbox && aircraftOtherDiv) {
-    aircraftCheckbox.addEventListener("change", () => {
-      aircraftOtherDiv.style.display = aircraftCheckbox.checked ? "block" : "none";
-      console.log("Aircraft checkbox toggled:", aircraftCheckbox.checked);
-    });
-  }
+  $("#aircraft_other_checkbox").change(function() {
+    $("#aircraft_other_div").toggle(this.checked);
+  });
   
   // Toggle the "Other" text input for the From field.
-  const fromCheckbox = document.querySelector("#from_other_checkbox");
-  const fromOtherDiv = document.querySelector("#from_other_div");
-  if (fromCheckbox && fromOtherDiv) {
-    fromCheckbox.addEventListener("change", () => {
-      fromOtherDiv.style.display = fromCheckbox.checked ? "block" : "none";
-      console.log("From checkbox toggled:", fromCheckbox.checked);
-    });
-  }
+  $("#from_other_checkbox").change(function() {
+    $("#from_other_div").toggle(this.checked);
+  });
   
   // Toggle the "Other" text input for the To field.
-  const toCheckbox = document.querySelector("#to_other_checkbox");
-  const toOtherDiv = document.querySelector("#to_other_div");
-  if (toCheckbox && toOtherDiv) {
-    toCheckbox.addEventListener("change", () => {
-      toOtherDiv.style.display = toCheckbox.checked ? "block" : "none";
-      console.log("To checkbox toggled:", toCheckbox.checked);
-    });
-  }
+  $("#to_other_checkbox").change(function() {
+    $("#to_other_div").toggle(this.checked);
+  });
 });
 
 function updateDefaultDuration() {
