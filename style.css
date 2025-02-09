@@ -48,7 +48,7 @@ table thead th {
   color: #ffffff;
 }
 
-/* Styling for messages */
+/* Error and success messages */
 .error {
   color: #dc3545;
 }
@@ -57,7 +57,13 @@ table thead th {
   color: #28a745;
 }
 
-/* Optional: adjust spacing for buttons if needed */
+/* Button styling adjustments */
 a.btn {
   margin: 2px;
+}
+
+/* Ensure navbar-text items are vertically centered with nav links */
+.navbar-nav .navbar-text {
+  display: inline-flex;
+  align-items: center;
 }

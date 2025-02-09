@@ -1,0 +1,2650 @@
+﻿<?php
+// account.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+// Fetch current user details.
+$stmt = $pdo->prepare("SELECT username, default_role, default_base FROM users WHERE id = ?");
+$stmt->execute([$_SESSION['user_id']]);
+$user = $stmt->fetch();
+
+// Fetch list of bases.
+$stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
+$bases = $stmtBases->fetchAll();
+
+$updateSuccess = "";
+$updateError = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Update default role if submitted.
+    if (isset($_POST['default_role'])) {
+        $default_role = $_POST['default_role'];
+        $stmtUpdateRole = $pdo->prepare("UPDATE users SET default_role = ? WHERE id = ?");
+        if ($stmtUpdateRole->execute([$default_role, $_SESSION['user_id']])) {
+            $_SESSION['default_role'] = $default_role;
+            $updateSuccess .= "Default role updated successfully. ";
+        } else {
+            $updateError .= "Failed to update default role. ";
+        }
+    }
+    // Update default base if submitted.
+    if (isset($_POST['default_base'])) {
+        $default_base = $_POST['default_base'];
+        $stmtUpdateBase = $pdo->prepare("UPDATE users SET default_base = ? WHERE id = ?");
+        if ($stmtUpdateBase->execute([$default_base, $_SESSION['user_id']])) {
+            $updateSuccess .= "Default base updated successfully. ";
+        } else {
+            $updateError .= "Failed to update default base. ";
+        }
+        // Refresh $user default_base for display.
+        $stmt = $pdo->prepare("SELECT default_base FROM users WHERE id = ?");
+        $stmt->execute([$_SESSION['user_id']]);
+        $user = array_merge($user, $stmt->fetch());
+    }
+}
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">My Account</h2>
+  </div>
+  <div class="card-body">
+    <?php 
+      if (!empty($updateError)) {
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($updateError) . "</div>";
+      }
+      if (!empty($updateSuccess)) {
+          echo "<div class='alert alert-success'>" . htmlspecialchars($updateSuccess) . "</div>";
+      }
+    ?>
+    <form method="post" action="account.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+      <div class="mb-3">
+        <label for="default_role" class="form-label">Default Role:</label>
+        <select name="default_role" id="default_role" class="form-select">
+          <option value="pilot" <?php echo ($user['default_role'] === 'pilot') ? 'selected' : ''; ?>>Pilot</option>
+          <option value="crew" <?php echo ($user['default_role'] === 'crew') ? 'selected' : ''; ?>>Crew</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label for="default_base" class="form-label">Default Base:</label>
+        <select name="default_base" id="default_base" class="form-select">
+          <?php foreach ($bases as $base): ?>
+            <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php echo ($base['id'] == $user['default_base']) ? 'selected' : ''; ?>>
+              <?php echo htmlspecialchars($base['base_name']); ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Update Account</button>
+    </form>
+  </div>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// admin.php - Admin Panel
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header("Location: index.php");
+    exit;
+}
+
+$error = '';
+$success = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error = "Invalid CSRF token.";
+    } else {
+        // Add Aircraft
+        if (isset($_POST['add_aircraft'])) {
+            $registration = trim($_POST['registration']);
+            $type = trim($_POST['type']);
+            $manufacturer_serial = trim($_POST['manufacturer_serial']);
+            $subtype = trim($_POST['subtype']);
+            $stmt = $pdo->prepare("INSERT INTO aircraft (registration, type, manufacturer_serial, subtype) VALUES (?, ?, ?, ?)");
+            if ($stmt->execute([$registration, $type, $manufacturer_serial, $subtype])) {
+                $success = "Aircraft added successfully.";
+            } else {
+                $error = "Failed to add aircraft.";
+            }
+        }
+        // Add User
+        elseif (isset($_POST['add_user'])) {
+            $username = trim($_POST['username']);
+            $email = trim($_POST['email']);
+            $password = $_POST['password'];
+            $role = $_POST['role'];
+            $default_role = $_POST['default_role'];
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+            $stmt->execute([$username, $email]);
+            if ($stmt->fetch()) {
+                $error = "Username or Email already exists.";
+            } else {
+                $hashed = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $pdo->prepare("INSERT INTO users (username, email, password, role, default_role) VALUES (?, ?, ?, ?, ?)");
+                if ($stmt->execute([$username, $email, $hashed, $role, $default_role])) {
+                    $success = "User account created.";
+                } else {
+                    $error = "Failed to create user account.";
+                }
+            }
+        }
+        // Manage Bases: Add new base
+        elseif (isset($_POST['add_base'])) {
+            $base_name = trim($_POST['base_name']);
+            if (empty($base_name)) {
+                $error = "Base name cannot be empty.";
+            } else {
+                $stmt = $pdo->prepare("INSERT INTO bases (base_name) VALUES (?)");
+                if ($stmt->execute([$base_name])) {
+                    $success = "Base added successfully.";
+                } else {
+                    $error = "Failed to add base.";
+                }
+            }
+        }
+        // Manage Bases: Edit existing base
+        elseif (isset($_POST['edit_base'])) {
+            $base_id = $_POST['base_id'];
+            $base_name = trim($_POST['base_name']);
+            if (empty($base_name)) {
+                $error = "Base name cannot be empty.";
+            } else {
+                $stmt = $pdo->prepare("UPDATE bases SET base_name = ? WHERE id = ?");
+                if ($stmt->execute([$base_name, $base_id])) {
+                    $success = "Base updated successfully.";
+                } else {
+                    $error = "Failed to update base.";
+                }
+            }
+        }
+        // Manage Bases: Delete base
+        elseif (isset($_POST['delete_base'])) {
+            $base_id = $_POST['base_id'];
+            $stmt = $pdo->prepare("DELETE FROM bases WHERE id = ?");
+            if ($stmt->execute([$base_id])) {
+                $success = "Base deleted successfully.";
+            } else {
+                $error = "Failed to delete base.";
+            }
+        }
+    }
+}
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Admin Panel</h2>
+  </div>
+  <div class="card-body">
+    <?php 
+      if ($error != '') {
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($error) . "</div>";
+      }
+      if ($success != '') {
+          echo "<div class='alert alert-success'>" . htmlspecialchars($success) . "</div>";
+      }
+    ?>
+    <!-- Add Aircraft Section -->
+    <section class="mb-4">
+      <h3 class="h5">Add New Aircraft</h3>
+      <form method="post" action="admin.php">
+        <input type="hidden" name="add_aircraft" value="1">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+        <div class="mb-3">
+          <label for="registration" class="form-label">Registration:</label>
+          <input type="text" name="registration" id="registration" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label for="type" class="form-label">Aircraft Type:</label>
+          <input type="text" name="type" id="type" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label for="manufacturer_serial" class="form-label">Manufacturer Serial:</label>
+          <input type="text" name="manufacturer_serial" id="manufacturer_serial" class="form-control">
+        </div>
+        <div class="mb-3">
+          <label for="subtype" class="form-label">Subtype:</label>
+          <input type="text" name="subtype" id="subtype" class="form-control">
+        </div>
+        <button type="submit" class="btn btn-primary">Add Aircraft</button>
+      </form>
+    </section>
+    
+    <!-- Add User Section -->
+    <section class="mb-4">
+      <h3 class="h5">Add New User Account</h3>
+      <form method="post" action="admin.php">
+        <input type="hidden" name="add_user" value="1">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+        <div class="mb-3">
+          <label for="username" class="form-label">Username:</label>
+          <input type="text" name="username" id="username" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label for="email" class="form-label">Email:</label>
+          <input type="email" name="email" id="email" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">Password:</label>
+          <input type="password" name="password" id="password" class="form-control" required>
+        </div>
+        <div class="mb-3 row">
+          <div class="col-md-6">
+            <label for="role" class="form-label">Role:</label>
+            <select name="role" id="role" class="form-select">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label for="default_role" class="form-label">Default Role:</label>
+            <select name="default_role" id="default_role" class="form-select">
+              <option value="pilot">Pilot</option>
+              <option value="crew">Crew</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Add User</button>
+      </form>
+    </section>
+    
+    <!-- Manage Bases Section -->
+    <section class="mb-4">
+      <h3 class="h5">Manage Bases</h3>
+      <!-- Add Base Form -->
+      <form method="post" action="admin.php" class="mb-3">
+        <input type="hidden" name="add_base" value="1">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+        <div class="mb-3">
+          <label for="base_name" class="form-label">New Base Name:</label>
+          <input type="text" name="base_name" id="base_name" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Base</button>
+      </form>
+      
+      <!-- List Existing Bases -->
+      <?php
+      $stmtBasesList = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
+      $basesList = $stmtBasesList->fetchAll();
+      if ($basesList):
+      ?>
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Base Name</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($basesList as $base): ?>
+          <tr>
+            <td><?php echo htmlspecialchars($base['id']); ?></td>
+            <td><?php echo htmlspecialchars($base['base_name']); ?></td>
+            <td>
+              <form class="d-inline" method="post" action="admin.php">
+                <input type="hidden" name="base_id" value="<?php echo htmlspecialchars($base['id']); ?>">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+                <input type="text" name="base_name" value="<?php echo htmlspecialchars($base['base_name']); ?>" class="form-control d-inline-block" style="width: auto;" required>
+                <button type="submit" name="edit_base" class="btn btn-sm btn-warning">Edit</button>
+              </form>
+              <form class="d-inline" method="post" action="admin.php" onsubmit="return confirm('Are you sure?');">
+                <input type="hidden" name="base_id" value="<?php echo htmlspecialchars($base['id']); ?>">
+                <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+                <button type="submit" name="delete_base" class="btn btn-sm btn-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php else: ?>
+        <p>No bases found.</p>
+      <?php endif; ?>
+    </section>
+    
+    <!-- Audit Trail Section -->
+    <section>
+      <h3 class="h5">Audit Trail</h3>
+      <?php
+      $stmtAudit = $pdo->query("SELECT a.*, u.username FROM audit_trail a JOIN users u ON a.user_id = u.id ORDER BY a.created_at DESC LIMIT 50");
+      $auditLogs = $stmtAudit->fetchAll();
+      if ($auditLogs):
+      ?>
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>User</th>
+            <th>Flight ID</th>
+            <th>Action</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($auditLogs as $log): ?>
+          <tr>
+            <td><?php echo htmlspecialchars($log['created_at']); ?></td>
+            <td><?php echo htmlspecialchars($log['username']); ?></td>
+            <td><?php echo htmlspecialchars($log['flight_id']); ?></td>
+            <td><?php echo htmlspecialchars($log['action']); ?></td>
+            <td><?php echo htmlspecialchars($log['details']); ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php else: ?>
+        <p>No audit logs found.</p>
+      <?php endif; ?>
+    </section>
+    
+  </div>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// admin_bases.php - Manage Bases page for admins (updated)
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header("Location: index.php");
+    exit;
+}
+
+$error = [];
+$success = [];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid CSRF token.";
+    } else {
+        // Adding a new base.
+        if (isset($_POST['add_base'])) {
+            $base_name = trim($_POST['base_name']);
+            if (empty($base_name)) {
+                $error[] = "Base name is required.";
+            } else {
+                $stmt = $pdo->prepare("INSERT INTO bases (base_name) VALUES (?)");
+                if ($stmt->execute([$base_name])) {
+                    $success[] = "Base added successfully.";
+                } else {
+                    $error[] = "Failed to add base.";
+                }
+            }
+        }
+        // Editing an existing base.
+        elseif (isset($_POST['edit_base'])) {
+            $base_id = $_POST['base_id'];
+            $base_name = trim($_POST['base_name']);
+            if (empty($base_name)) {
+                $error[] = "Base name cannot be empty.";
+            } else {
+                $stmt = $pdo->prepare("UPDATE bases SET base_name = ? WHERE id = ?");
+                if ($stmt->execute([$base_name, $base_id])) {
+                    $success[] = "Base updated successfully.";
+                } else {
+                    $error[] = "Failed to update base.";
+                }
+            }
+        }
+        // Deleting a base.
+        elseif (isset($_POST['delete_base'])) {
+            $base_id = $_POST['base_id'];
+            $stmt = $pdo->prepare("DELETE FROM bases WHERE id = ?");
+            if ($stmt->execute([$base_id])) {
+                $success[] = "Base deleted successfully.";
+            } else {
+                $error[] = "Failed to delete base.";
+            }
+        }
+    }
+}
+
+// Retrieve the list of bases.
+$stmt = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
+$bases = $stmt->fetchAll();
+
+include('header.php');
+?>
+<div class="flight-entry-container">
+  <h2>Manage Bases</h2>
+  <?php 
+    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
+    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
+  ?>
+  
+  <h3>Add New Base</h3>
+  <form method="post" action="admin_bases.php">
+    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+    <input type="hidden" name="add_base" value="1">
+    <div class="form-group">
+      <label for="base_name">Base Name:</label>
+      <input type="text" name="base_name" id="base_name" required>
+    </div>
+    <div class="form-group">
+      <input type="submit" value="Add Base">
+    </div>
+  </form>
+  
+  <h3>Existing Bases</h3>
+  <?php if ($bases): ?>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Base Name</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <?php foreach ($bases as $base): ?>
+      <tr>
+        <td><?php echo htmlspecialchars($base['id']); ?></td>
+        <td><?php echo htmlspecialchars($base['base_name']); ?></td>
+        <td>
+          <!-- Edit form -->
+          <form style="display:inline;" method="post" action="admin_bases.php">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+            <input type="hidden" name="base_id" value="<?php echo htmlspecialchars($base['id']); ?>">
+            <input type="text" name="base_name" value="<?php echo htmlspecialchars($base['base_name']); ?>" required>
+            <input type="submit" name="edit_base" value="Edit">
+          </form>
+          <!-- Delete form -->
+          <form style="display:inline;" method="post" action="admin_bases.php" onsubmit="return confirm('Are you sure?');">
+            <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+            <input type="hidden" name="base_id" value="<?php echo htmlspecialchars($base['id']); ?>">
+            <input type="submit" name="delete_base" value="Delete">
+          </form>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php else: ?>
+    <p>No bases found.</p>
+  <?php endif; ?>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// base_edit.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
+    header("Location: index.php");
+    exit;
+}
+
+if (!isset($_GET['id'])) {
+    die("Base ID not specified.");
+}
+
+$base_id = $_GET['id'];
+$stmt = $pdo->prepare("SELECT * FROM bases WHERE id = ?");
+$stmt->execute([$base_id]);
+$base = $stmt->fetch();
+
+if (!$base) {
+    die("Base not found.");
+}
+
+$error = [];
+$success = [];
+$csrf_token = getCSRFToken();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid CSRF token.";
+    } else {
+        $base_name = trim($_POST['base_name']);
+        $base_code = trim($_POST['base_code'] ?? '');
+        $description = trim($_POST['description'] ?? '');
+        
+        $stmt = $pdo->prepare("UPDATE bases SET base_name = ?, base_code = ?, description = ? WHERE id = ?");
+        if ($stmt->execute([$base_name, $base_code, $description, $base_id])) {
+            $success[] = "Base updated successfully.";
+            $stmt = $pdo->prepare("SELECT * FROM bases WHERE id = ?");
+            $stmt->execute([$base_id]);
+            $base = $stmt->fetch();
+        } else {
+            $error[] = "Failed to update base.";
+        }
+    }
+}
+
+include('header.php');
+?>
+<div class="flight-entry-container">
+  <h2>Edit Base</h2>
+  <?php
+    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
+    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
+  ?>
+  <form method="post" action="base_edit.php?id=<?php echo $base_id; ?>">
+    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+    <div class="form-group">
+      <label for="base_name">Base Name:</label>
+      <input type="text" name="base_name" id="base_name" value="<?php echo htmlspecialchars($base['base_name']); ?>" required>
+    </div>
+    <div class="form-group">
+      <label for="base_code">Base Code:</label>
+      <input type="text" name="base_code" id="base_code" value="<?php echo htmlspecialchars($base['base_code']); ?>">
+    </div>
+    <div class="form-group">
+      <label for="description">Description:</label>
+      <textarea name="description" id="description"><?php echo htmlspecialchars($base['description']); ?></textarea>
+    </div>
+    <div class="form-group">
+      <input type="submit" value="Update Base">
+    </div>
+  </form>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// db.php
+$host = 'localhost';
+$db   = 'flightlog';
+$user = 'flightlog';      // Change to your database username
+$pass = 'flightlog';      // Change to your database password
+$charset = 'utf8mb4';
+
+$options = [
+    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,  
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,        
+    PDO::ATTR_EMULATE_PREPARES   => false,
+];
+
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$db;charset=$charset", $user, $pass, $options);
+} catch (PDOException $e) {
+    throw new PDOException($e->getMessage(), (int)$e->getCode());
+}
+?>
+<?php
+// export.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['export'])) {
+    // Get export criteria
+    $start_date = isset($_POST['start_date']) ? trim($_POST['start_date']) : '';
+    $end_date   = isset($_POST['end_date'])   ? trim($_POST['end_date'])   : '';
+
+    // Build query criteria
+    $whereClauses = ["user_id = ?"];
+    $params = [$_SESSION['user_id']];
+    if (!empty($start_date)) {
+        $whereClauses[] = "flight_date >= ?";
+        $params[] = $start_date;
+    }
+    if (!empty($end_date)) {
+        $whereClauses[] = "flight_date <= ?";
+        $params[] = $end_date;
+    }
+    $whereSQL = implode(" AND ", $whereClauses);
+
+    // Retrieve matching flight records
+    $stmt = $pdo->prepare("SELECT flight_date, aircraft_id, custom_aircraft_details, flight_from, flight_to, flight_duration 
+                           FROM flights 
+                           WHERE $whereSQL 
+                           ORDER BY flight_date DESC");
+    $stmt->execute($params);
+    $flights = $stmt->fetchAll();
+
+    // Set headers for CSV download.
+    header('Content-Type: text/csv');
+    header('Content-Disposition: attachment; filename="flight_log_export.csv"');
+
+    $output = fopen('php://output', 'w');
+    // CSV header row
+    fputcsv($output, ['Date', 'Aircraft', 'From', 'To', 'Duration']);
+    // Loop through flights and write CSV rows.
+    foreach ($flights as $flight) {
+        // Determine aircraft details.
+        if ($flight['aircraft_id'] !== null) {
+            $stmtA = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
+            $stmtA->execute([$flight['aircraft_id']]);
+            $aircraft = $stmtA->fetch(PDO::FETCH_ASSOC);
+            $aircraft_reg = ($aircraft && isset($aircraft['registration'])) ? $aircraft['registration'] : 'Unknown';
+        } else {
+            $aircraft_reg = $flight['custom_aircraft_details'];
+        }
+        // Convert flight_from and flight_to to base names if numeric.
+        $from = $flight['flight_from'];
+        if (is_numeric($from)) {
+            $stmtB = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+            $stmtB->execute([$from]);
+            $base = $stmtB->fetch(PDO::FETCH_ASSOC);
+            if ($base) {
+                $from = $base['base_name'];
+            }
+        }
+        $to = $flight['flight_to'];
+        if (is_numeric($to)) {
+            $stmtB = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+            $stmtB->execute([$to]);
+            $base = $stmtB->fetch(PDO::FETCH_ASSOC);
+            if ($base) {
+                $to = $base['base_name'];
+            }
+        }
+        fputcsv($output, [
+            $flight['flight_date'],
+            $aircraft_reg,
+            $from,
+            $to,
+            $flight['flight_duration']
+        ]);
+    }
+    fclose($output);
+    exit;
+} else {
+    include('header.php');
+    $csrf_token = getCSRFToken();
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Export Flight Log</h2>
+  </div>
+  <div class="card-body">
+    <form method="post" action="export.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      <div class="mb-3">
+        <label for="start_date" class="form-label">Start Date (optional):</label>
+        <input type="date" class="form-control" name="start_date" id="start_date">
+      </div>
+      <div class="mb-3">
+        <label for="end_date" class="form-label">End Date (optional):</label>
+        <input type="date" class="form-control" name="end_date" id="end_date">
+      </div>
+      <button type="submit" name="export" class="btn btn-primary">Export CSV</button>
+    </form>
+  </div>
+</div>
+<?php
+    include('footer.php');
+}
+?>
+<?php
+// flight_delete.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    die("Invalid request method.");
+}
+
+if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+    die("Invalid request.");
+}
+
+if (!isset($_POST['id'])) {
+    die("Flight ID not specified.");
+}
+
+$flight_id = $_POST['id'];
+
+// Retrieve the flight record.
+$stmt = $pdo->prepare("SELECT * FROM flights WHERE id = ?");
+$stmt->execute([$flight_id]);
+$flight = $stmt->fetch();
+
+if (!$flight) {
+    die("Flight record not found.");
+}
+
+// Ensure the user is authorized.
+if ($flight['user_id'] != $_SESSION['user_id'] && $_SESSION['role'] != 'admin') {
+    die("Unauthorized access.");
+}
+
+// Delete any associated flight breakdown records.
+$stmtBreakdown = $pdo->prepare("DELETE FROM flight_breakdown WHERE flight_id = ?");
+$stmtBreakdown->execute([$flight_id]);
+
+// Delete the flight record.
+$stmt = $pdo->prepare("DELETE FROM flights WHERE id = ?");
+if ($stmt->execute([$flight_id])) {
+    // Log the deletion.
+    $stmt = $pdo->prepare("INSERT INTO audit_trail (user_id, flight_id, action, details) VALUES (?, ?, ?, ?)");
+    $stmt->execute([$_SESSION['user_id'], $flight_id, 'delete', 'Flight record deleted.']);
+    header("Location: index.php");
+    exit;
+} else {
+    die("Failed to delete flight record.");
+}
+?>
+<?php
+// flight_edit.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+function logAudit($pdo, $user_id, $flight_id, $action, $details = "") {
+    $stmt = $pdo->prepare("INSERT INTO audit_trail (user_id, flight_id, action, details) VALUES (?, ?, ?, ?)");
+    $stmt->execute([$user_id, $flight_id, $action, $details]);
+}
+
+if (!isset($_GET['id'])) {
+    die("Flight ID not specified.");
+}
+
+$flight_id = $_GET['id'];
+$stmt = $pdo->prepare("SELECT * FROM flights WHERE id = ?");
+$stmt->execute([$flight_id]);
+$flight = $stmt->fetch();
+
+if (!$flight) {
+    die("Flight record not found.");
+}
+
+if ($flight['user_id'] != $_SESSION['user_id'] && $_SESSION['role'] != 'admin') {
+    die("Unauthorized access.");
+}
+
+$stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
+$aircraft_list = $stmt->fetchAll();
+
+$error = [];
+$success = [];
+$csrf_token = getCSRFToken();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid CSRF token.";
+    } else {
+        $flight_date = $_POST['flight_date'];
+        $aircraft_id = $_POST['aircraft_id'];
+        $flight_from = $_POST['flight_from'];
+        $flight_to   = $_POST['flight_to'];
+        $capacity    = $_POST['capacity'];
+        $pilot_type  = $_POST['pilot_type'];
+        $crew_names  = $_POST['crew_names'];
+        $rotors_start = $_POST['rotors_start'];
+        $rotors_stop  = $_POST['rotors_stop'];
+        $night_vision = isset($_POST['night_vision']) ? 1 : 0;
+        $night_vision_duration = $_POST['night_vision_duration'];
+        $takeoffs    = $_POST['takeoffs'];
+        $landings    = $_POST['landings'];
+        $notes       = $_POST['notes'];
+
+        try {
+            $start = new DateTime($rotors_start);
+            $stop  = new DateTime($rotors_stop);
+        } catch (Exception $e) {
+            $error[] = "Invalid time format.";
+        }
+        if (empty($error)) {
+            $interval = $start->diff($stop);
+            $flight_duration = $interval->format('%H:%I:%S');
+
+            $stmt = $pdo->prepare("UPDATE flights SET flight_date = ?, aircraft_id = ?, flight_from = ?, flight_to = ?, capacity = ?, pilot_type = ?, crew_names = ?, rotors_start = ?, rotors_stop = ?, night_vision = ?, night_vision_duration = ?, takeoffs = ?, landings = ?, notes = ?, flight_duration = ? WHERE id = ?");
+            if ($stmt->execute([$flight_date, $aircraft_id, $flight_from, $flight_to, $capacity, $pilot_type, $crew_names, $rotors_start, $rotors_stop, $night_vision, $night_vision_duration, $takeoffs, $landings, $notes, $flight_duration, $flight_id])) {
+                logAudit($pdo, $_SESSION['user_id'], $flight_id, 'edit', 'Flight record updated.');
+                $success[] = "Flight record updated successfully.";
+                $stmt = $pdo->prepare("SELECT * FROM flights WHERE id = ?");
+                $stmt->execute([$flight_id]);
+                $flight = $stmt->fetch();
+            } else {
+                $error[] = "Failed to update flight record.";
+            }
+        }
+    }
+}
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Edit Flight Record</h2>
+  </div>
+  <div class="card-body">
+    <?php 
+      foreach ($error as $msg) { 
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($msg) . "</div>"; 
+      }
+      foreach ($success as $msg) { 
+          echo "<div class='alert alert-success'>" . htmlspecialchars($msg) . "</div>"; 
+      }
+    ?>
+    <form method="post" action="flight_edit.php?id=<?php echo htmlspecialchars($flight_id); ?>">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      <div class="mb-3 row">
+        <label for="flight_date" class="col-sm-2 col-form-label">Date:</label>
+        <div class="col-sm-4">
+          <input type="date" name="flight_date" id="flight_date" class="form-control" value="<?php echo htmlspecialchars($flight['flight_date']); ?>" required>
+        </div>
+      </div>
+      <div class="mb-3 row">
+        <label for="aircraft_id" class="col-sm-2 col-form-label">Aircraft:</label>
+        <div class="col-sm-6">
+          <select name="aircraft_id" id="aircraft_id" class="form-select" required>
+            <option value="">Select Aircraft</option>
+            <?php foreach ($aircraft_list as $aircraft): ?>
+              <option value="<?php echo $aircraft['id']; ?>" <?php if ($aircraft['id'] == $flight['aircraft_id']) echo 'selected'; ?>>
+                <?php echo htmlspecialchars($aircraft['registration']); ?> &ndash; <?php echo htmlspecialchars($aircraft['type']); ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+      </div>
+      <div class="mb-3 row">
+        <label for="flight_from" class="col-sm-2 col-form-label">From:</label>
+        <div class="col-sm-4">
+          <input type="text" name="flight_from" id="flight_from" class="form-control" value="<?php echo htmlspecialchars($flight['flight_from']); ?>" required>
+        </div>
+        <label for="flight_to" class="col-sm-2 col-form-label">To:</label>
+        <div class="col-sm-4">
+          <input type="text" name="flight_to" id="flight_to" class="form-control" value="<?php echo htmlspecialchars($flight['flight_to']); ?>" required>
+        </div>
+      </div>
+      <div class="mb-3 row">
+        <label for="capacity" class="col-sm-2 col-form-label">Capacity:</label>
+        <div class="col-sm-4">
+          <select name="capacity" id="capacity" class="form-select">
+            <option value="pilot" <?php if ($flight['capacity'] == 'pilot') echo 'selected'; ?>>Pilot</option>
+            <option value="crew" <?php if ($flight['capacity'] == 'crew') echo 'selected'; ?>>Crew</option>
+          </select>
+        </div>
+        <label for="pilot_type" class="col-sm-2 col-form-label">Pilot Type:</label>
+        <div class="col-sm-4">
+          <select name="pilot_type" id="pilot_type" class="form-select">
+            <option value="single" <?php if ($flight['pilot_type'] == 'single') echo 'selected'; ?>>Single Pilot</option>
+            <option value="multi" <?php if ($flight['pilot_type'] == 'multi') echo 'selected'; ?>>Multi Pilot</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label for="crew_names" class="form-label">Crew Names:</label>
+        <input type="text" name="crew_names" id="crew_names" class="form-control" value="<?php echo htmlspecialchars($flight['crew_names']); ?>">
+      </div>
+      <div class="mb-3 row">
+        <label for="rotors_start" class="col-sm-2 col-form-label">Rotors Start:</label>
+        <div class="col-sm-4">
+          <input type="time" name="rotors_start" id="rotors_start" class="form-control" value="<?php echo htmlspecialchars($flight['rotors_start']); ?>" required oninput="recalcBreakdown();">
+        </div>
+        <label for="rotors_stop" class="col-sm-2 col-form-label">Rotors Stop:</label>
+        <div class="col-sm-4">
+          <input type="time" name="rotors_stop" id="rotors_stop" class="form-control" value="<?php echo htmlspecialchars($flight['rotors_stop']); ?>" required oninput="recalcBreakdown();">
+        </div>
+      </div>
+      <div class="mb-3">
+        <label for="notes" class="form-label">Notes:</label>
+        <textarea name="notes" id="notes" class="form-control"><?php echo htmlspecialchars($flight['notes']); ?></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">Update Flight Record</button>
+    </form>
+  </div>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// flight_entry.php (Updated with Bootstrap UI enhancements)
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+// Set default date.
+$default_date = date('Y-m-d');
+
+// Retrieve the user's most recent flight to set the default aircraft.
+$stmtLast = $pdo->prepare("SELECT aircraft_id FROM flights WHERE user_id = ? ORDER BY flight_date DESC, id DESC LIMIT 1");
+$stmtLast->execute([$_SESSION['user_id']]);
+$lastFlight = $stmtLast->fetch();
+$lastAircraftId = $lastFlight ? $lastFlight['aircraft_id'] : "";
+
+// Fetch master list of aircraft.
+$stmt = $pdo->query("SELECT * FROM aircraft ORDER BY registration ASC");
+$aircraft_list = $stmt->fetchAll();
+
+// Fetch bases.
+$stmtBases = $pdo->query("SELECT * FROM bases ORDER BY base_name ASC");
+$bases = $stmtBases->fetchAll();
+
+// Re-query user's default_base and default_role.
+$stmtUser = $pdo->prepare("SELECT default_base, default_role FROM users WHERE id = ?");
+$stmtUser->execute([$_SESSION['user_id']]);
+$userData = $stmtUser->fetch();
+$default_base = $userData['default_base'] ?? '';
+$default_role = $userData['default_role'] ?? 'pilot';
+if (!$default_base && count($bases) > 0) {
+    $default_base = $bases[0]['id'];
+}
+
+// Determine default role for Flight Role Breakdown.
+$defaultRowRole = ($default_role === 'crew') ? "Crew" : "Day P1";
+
+// Build role options.
+$roleOptions = '
+<option value="Day P1"' . ($defaultRowRole == "Day P1" ? ' selected' : '') . '>Day P1</option>
+<option value="Day P2"' . ($defaultRowRole == "Day P2" ? ' selected' : '') . '>Day P2</option>
+<option value="Day Pilot under training"' . ($defaultRowRole == "Day Pilot under training" ? ' selected' : '') . '>Day Pilot under training</option>
+<option value="Night P1"' . ($defaultRowRole == "Night P1" ? ' selected' : '') . '>Night P1</option>
+<option value="Night P2"' . ($defaultRowRole == "Night P2" ? ' selected' : '') . '>Night P2</option>
+<option value="Night Pilot under training"' . ($defaultRowRole == "Night Pilot under training" ? ' selected' : '') . '>Night Pilot under training</option>
+<option value="Simulator"' . ($defaultRowRole == "Simulator" ? ' selected' : '') . '>Simulator</option>
+<option value="Crew"' . ($defaultRowRole == "Crew" ? ' selected' : '') . '>Crew</option>';
+
+$error = [];
+$success = [];
+$csrf_token = getCSRFToken();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid request. Please try again.";
+    } else {
+        // (Your flight processing logic goes here.)
+        // If the submission is successful, you might add a success message.
+        // Otherwise, collect error messages.
+    }
+}
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Enter New Flight Record</h2>
+  </div>
+  <div class="card-body">
+    <?php 
+      foreach ($error as $msg) { 
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($msg) . "</div>"; 
+      }
+      foreach ($success as $msg) { 
+          echo "<div class='alert alert-success'>" . htmlspecialchars($msg) . "</div>"; 
+      }
+    ?>
+    <form method="post" action="flight_entry.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      
+      <!-- Flight Details Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Flight Details</legend>
+        <div class="mb-3 row">
+          <label for="flight_date" class="col-sm-2 col-form-label">Date:</label>
+          <div class="col-sm-4">
+            <input type="date" class="form-control" name="flight_date" id="flight_date" value="<?php echo $default_date; ?>" required>
+          </div>
+        </div>
+      </fieldset>
+      
+      <!-- Aircraft Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Aircraft</legend>
+        <div class="mb-3 row">
+          <label for="aircraft_select" class="col-sm-2 col-form-label">Select Aircraft:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="aircraft_select" id="aircraft_select">
+              <option value="">Select Aircraft</option>
+              <?php foreach ($aircraft_list as $ac): ?>
+                <option value="<?php echo $ac['id']; ?>" <?php echo ($ac['id'] == $lastAircraftId) ? 'selected' : ''; ?>>
+                  <?php echo htmlspecialchars($ac['registration']); ?> - <?php echo htmlspecialchars($ac['type']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="aircraft_other_checkbox" name="aircraft_other_checkbox">
+              <label class="form-check-label" for="aircraft_other_checkbox">Other</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3" id="aircraft_other_div" style="display:none;">
+          <div class="row">
+            <div class="col-sm-6">
+              <label for="aircraft_type" class="form-label">Aircraft Type:</label>
+              <input type="text" class="form-control" name="aircraft_type" id="aircraft_type">
+            </div>
+            <div class="col-sm-6">
+              <label for="aircraft_registration" class="form-label">Aircraft Registration:</label>
+              <input type="text" class="form-control" name="aircraft_registration" id="aircraft_registration">
+            </div>
+          </div>
+        </div>
+      </fieldset>
+      
+      <!-- Flight Route Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Flight Route</legend>
+        <div class="mb-3 row">
+          <label for="from_select" class="col-sm-2 col-form-label">From:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="from_select" id="from_select">
+              <?php foreach ($bases as $base): ?>
+                <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if($base['id'] == $default_base) echo "selected"; ?>>
+                  <?php echo htmlspecialchars($base['base_name']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="from_other_checkbox" name="from_other_checkbox">
+              <label class="form-check-label" for="from_other_checkbox">Other</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3" id="from_other_div" style="display:none;">
+          <input type="text" class="form-control" name="from_other" id="from_other" placeholder="Enter location">
+        </div>
+        
+        <div class="mb-3 row">
+          <label for="to_select" class="col-sm-2 col-form-label">To:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="to_select" id="to_select">
+              <?php foreach ($bases as $base): ?>
+                <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if($base['id'] == $default_base) echo "selected"; ?>>
+                  <?php echo htmlspecialchars($base['base_name']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="to_other_checkbox" name="to_other_checkbox">
+              <label class="form-check-label" for="to_other_checkbox">Other</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3" id="to_other_div" style="display:none;">
+          <input type="text" class="form-control" name="to_other" id="to_other" placeholder="Enter location">
+        </div>
+      </fieldset>
+      
+      <!-- Additional Flight Details Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Additional Flight Details</legend>
+        <div class="mb-3 row">
+          <label for="capacity" class="col-sm-2 col-form-label">Capacity:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="capacity" id="capacity">
+              <option value="pilot" <?php echo ($default_role==='pilot') ? 'selected' : ''; ?>>Pilot</option>
+              <option value="crew" <?php echo ($default_role==='crew') ? 'selected' : ''; ?>>Crew</option>
+            </select>
+          </div>
+          <label for="pilot_type" class="col-sm-2 col-form-label">Pilot Type:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="pilot_type" id="pilot_type">
+              <option value="single">Single Pilot</option>
+              <option value="multi">Multi Pilot</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label for="crew_names" class="form-label">Crew Names:</label>
+          <input type="text" class="form-control" name="crew_names" id="crew_names" placeholder="Enter crew names (comma separated)">
+        </div>
+      </fieldset>
+      
+      <!-- Flight Timing Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Flight Timing</legend>
+        <div class="mb-3 row">
+          <label for="rotors_start" class="col-sm-2 col-form-label">Rotors Start:</label>
+          <div class="col-sm-4">
+            <input type="time" class="form-control" name="rotors_start" id="rotors_start" required oninput="recalcBreakdown();">
+          </div>
+          <label for="rotors_stop" class="col-sm-2 col-form-label">Rotors Stop:</label>
+          <div class="col-sm-4">
+            <input type="time" class="form-control" name="rotors_stop" id="rotors_stop" required oninput="recalcBreakdown();">
+          </div>
+        </div>
+      </fieldset>
+      
+      <!-- Flight Role Breakdown Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Flight Role Breakdown</legend>
+        <p class="small text-muted">Detail the breakdown of your flight time by role (in minutes). The first row is autoâ€‘calculated based on your rotors times.</p>
+        <table class="table table-bordered" id="breakdownTable">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Duration (minutes)</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <select class="form-select" name="role[]" id="defaultRoleSelect">
+                  <?php echo $roleOptions; ?>
+                </select>
+              </td>
+              <td>
+                <input type="number" class="form-control" name="duration[]" id="defaultDuration" min="0" placeholder="Minutes" readonly>
+              </td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+        <button type="button" class="btn btn-secondary" onclick="addRow();">Add Role</button>
+      </fieldset>
+      
+      <!-- NVG Section (Optional) -->
+      <fieldset class="mb-4">
+        <legend class="h5">NVG (Night Vision Goggles) <small class="text-muted">(Optional)</small></legend>
+        <div class="mb-3 row">
+          <label for="nvg_time" class="col-sm-2 col-form-label">NVG Time:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="nvg_time" id="nvg_time" min="0" value="0">
+          </div>
+          <label for="nvg_takeoffs" class="col-sm-2 col-form-label">NVG Takeoffs:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="nvg_takeoffs" id="nvg_takeoffs" min="0" value="0">
+          </div>
+        </div>
+        <div class="mb-3 row">
+          <label for="nvg_landings" class="col-sm-2 col-form-label">NVG Landings:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="nvg_landings" id="nvg_landings" min="0" value="0">
+          </div>
+        </div>
+      </fieldset>
+      
+      <!-- Instrument Flight Section (Optional) -->
+      <fieldset class="mb-4">
+        <legend class="h5">Instrument Flight <small class="text-muted">(Optional)</small></legend>
+        <div class="mb-3 row">
+          <label for="sim_if" class="col-sm-2 col-form-label">Sim IF:</label>
+          <div class="col-sm-4">
+            <input type="time" class="form-control" name="sim_if" id="sim_if">
+          </div>
+          <label for="act_if" class="col-sm-2 col-form-label">Act IF:</label>
+          <div class="col-sm-4">
+            <input type="time" class="form-control" name="act_if" id="act_if">
+          </div>
+        </div>
+        <div class="mb-3 row">
+          <label for="ils_approaches" class="col-sm-2 col-form-label">ILS Approaches:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="ils_approaches" id="ils_approaches" min="0" value="0">
+          </div>
+          <label for="rnp" class="col-sm-2 col-form-label">RNP:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="rnp" id="rnp" min="0" value="0">
+          </div>
+        </div>
+        <div class="mb-3 row">
+          <label for="npa" class="col-sm-2 col-form-label">NPA:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="npa" id="npa" min="0" value="0">
+          </div>
+        </div>
+      </fieldset>
+      
+      <div class="mb-3">
+        <button type="submit" class="btn btn-primary">Add Flight Record</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- jQuery (for dynamic behavior) -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+<script>
+// Toggle visibility for "Other" options.
+$(document).ready(function(){
+  $("#aircraft_other_checkbox").change(function(){
+    $("#aircraft_other_div").toggle(this.checked);
+  });
+  $("#from_other_checkbox").change(function(){
+    $("#from_other_div").toggle(this.checked);
+  });
+  $("#to_other_checkbox").change(function(){
+    $("#to_other_div").toggle(this.checked);
+  });
+});
+
+// Function to recalc the default flight role breakdown row.
+function recalcBreakdown(){
+    const rotorsStart = document.getElementById('rotors_start').value;
+    const rotorsStop = document.getElementById('rotors_stop').value;
+    if(!rotorsStart || !rotorsStop) return;
+    
+    let start = new Date("1970-01-01T" + rotorsStart + "Z");
+    let stop = new Date("1970-01-01T" + rotorsStop + "Z");
+    let totalMinutes = (stop - start) / 60000;
+    if(totalMinutes < 0){ totalMinutes += 1440; }
+    
+    const $tbody = $("#breakdownTable tbody");
+    let additionalMinutes = 0;
+    
+    $tbody.find("tr").each(function(index){
+        if(index > 0){
+            const val = parseInt($(this).find("input[name='duration[]']").val()) || 0;
+            additionalMinutes += val;
+        }
+    });
+    
+    let defaultMinutes = totalMinutes - additionalMinutes;
+    if(defaultMinutes < 0) defaultMinutes = 0;
+    
+    $("#defaultDuration").val(defaultMinutes);
+}
+
+// Recalculate when any additional breakdown row changes.
+$(document).on("change", "input[name='duration[]']", function(){
+    if($(this).closest("tr").index() > 0){
+        recalcBreakdown();
+    }
+});
+
+// Add a new breakdown row.
+function addRow(){
+    const tbody = $("#breakdownTable tbody");
+    let newRow = `<tr>
+            <td>
+              <select class="form-select" name="role[]">
+                <?php echo json_encode($roleOptions); ?>
+              </select>
+            </td>
+            <td>
+              <input type="number" class="form-control" name="duration[]" min="0" placeholder="Minutes">
+            </td>
+            <td>
+              <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this);">Remove</button>
+            </td>
+          </tr>`;
+    tbody.append(newRow);
+    recalcBreakdown();
+}
+
+// Remove a breakdown row.
+function removeRow(btn){
+    $(btn).closest('tr').remove();
+    recalcBreakdown();
+}
+</script>
+<?php include('footer.php'); ?>
+<?php
+// flight_view.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+if (!isset($_GET['id'])) {
+    die("Flight ID not specified.");
+}
+
+$flight_id = $_GET['id'];
+
+// Retrieve the flight record.
+$stmt = $pdo->prepare("SELECT * FROM flights WHERE id = ?");
+$stmt->execute([$flight_id]);
+$flight = $stmt->fetch();
+
+if (!$flight) {
+    die("Flight record not found.");
+}
+
+// Ensure the user is authorized.
+if ($flight['user_id'] != $_SESSION['user_id'] && $_SESSION['role'] != 'admin') {
+    die("Unauthorized access.");
+}
+
+// Retrieve aircraft details.
+$aircraftInfo = "";
+if ($flight['aircraft_id'] !== null) {
+    $stmtA = $pdo->prepare("SELECT registration, type FROM aircraft WHERE id = ?");
+    $stmtA->execute([$flight['aircraft_id']]);
+    $aircraft = $stmtA->fetch(PDO::FETCH_ASSOC);
+    if ($aircraft) {
+        $aircraftInfo = htmlspecialchars($aircraft['registration']) . " - " . htmlspecialchars($aircraft['type']);
+    }
+} else {
+    $aircraftInfo = htmlspecialchars($flight['custom_aircraft_details']);
+}
+
+// Helper to get base name.
+function getBaseNameDisplay($pdo, $value) {
+    if (is_numeric($value)) {
+        $stmtB = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+        $stmtB->execute([$value]);
+        $base = $stmtB->fetch(PDO::FETCH_ASSOC);
+        if ($base) {
+            return htmlspecialchars($base['base_name']);
+        }
+    }
+    return htmlspecialchars($value);
+}
+
+$fromName = getBaseNameDisplay($pdo, $flight['flight_from']);
+$toName   = getBaseNameDisplay($pdo, $flight['flight_to']);
+
+// Retrieve flight breakdown details.
+$stmtBreakdown = $pdo->prepare("SELECT role, duration_minutes FROM flight_breakdown WHERE flight_id = ?");
+$stmtBreakdown->execute([$flight_id]);
+$breakdowns = $stmtBreakdown->fetchAll();
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Flight Details</h2>
+  </div>
+  <div class="card-body">
+    <div class="mb-3">
+      <a class="btn btn-secondary" href="flight_view_pdf.php?id=<?php echo htmlspecialchars($flight_id); ?>" target="_blank">Download PDF</a>
+    </div>
+    <h4>Flight Information</h4>
+    <table class="table table-striped">
+      <tr>
+        <th>Date</th>
+        <td><?php echo htmlspecialchars($flight['flight_date']); ?></td>
+      </tr>
+      <tr>
+        <th>Aircraft</th>
+        <td><?php echo $aircraftInfo; ?></td>
+      </tr>
+      <tr>
+        <th>From</th>
+        <td><?php echo $fromName; ?></td>
+      </tr>
+      <tr>
+        <th>To</th>
+        <td><?php echo $toName; ?></td>
+      </tr>
+      <tr>
+        <th>Capacity</th>
+        <td><?php echo htmlspecialchars($flight['capacity']); ?></td>
+      </tr>
+      <tr>
+        <th>Pilot Type</th>
+        <td><?php echo htmlspecialchars($flight['pilot_type']); ?></td>
+      </tr>
+      <tr>
+        <th>Crew Names</th>
+        <td><?php echo htmlspecialchars($flight['crew_names']); ?></td>
+      </tr>
+      <tr>
+        <th>Rotors Start</th>
+        <td><?php echo htmlspecialchars($flight['rotors_start']); ?></td>
+      </tr>
+      <tr>
+        <th>Rotors Stop</th>
+        <td><?php echo htmlspecialchars($flight['rotors_stop']); ?></td>
+      </tr>
+      <tr>
+        <th>Flight Duration</th>
+        <td><?php echo htmlspecialchars($flight['flight_duration']); ?></td>
+      </tr>
+    </table>
+    <h4>Flight Role Breakdown</h4>
+    <?php if ($breakdowns): ?>
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Duration (minutes)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($breakdowns as $bd): ?>
+          <tr>
+            <td><?php echo htmlspecialchars($bd['role']); ?></td>
+            <td><?php echo htmlspecialchars($bd['duration_minutes']); ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    <?php else: ?>
+      <p>No breakdown details available.</p>
+    <?php endif; ?>
+    
+    <h4>NVG</h4>
+    <table class="table table-bordered">
+      <tr>
+        <th>NVG Time (minutes)</th>
+        <td><?php echo htmlspecialchars($flight['nvg_time']); ?></td>
+      </tr>
+      <tr>
+        <th>NVG Takeoffs</th>
+        <td><?php echo htmlspecialchars($flight['nvg_takeoffs']); ?></td>
+      </tr>
+      <tr>
+        <th>NVG Landings</th>
+        <td><?php echo htmlspecialchars($flight['nvg_landings']); ?></td>
+      </tr>
+    </table>
+    
+    <h4>Instrument Flight</h4>
+    <table class="table table-bordered">
+      <tr>
+        <th>Sim IF</th>
+        <td><?php echo htmlspecialchars($flight['sim_if']); ?></td>
+      </tr>
+      <tr>
+        <th>Act IF</th>
+        <td><?php echo htmlspecialchars($flight['act_if']); ?></td>
+      </tr>
+      <tr>
+        <th>ILS Approaches</th>
+        <td><?php echo htmlspecialchars($flight['ils_approaches']); ?></td>
+      </tr>
+      <tr>
+        <th>RNP</th>
+        <td><?php echo htmlspecialchars($flight['rnp']); ?></td>
+      </tr>
+      <tr>
+        <th>NPA</th>
+        <td><?php echo htmlspecialchars($flight['npa']); ?></td>
+      </tr>
+    </table>
+    <a class="btn btn-primary" href="index.php">Back to Flight Log</a>
+  </div>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// flight_view.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+if (!isset($_GET['id'])) {
+    die("Flight ID not specified.");
+}
+
+$flight_id = $_GET['id'];
+
+// Retrieve the flight record.
+$stmt = $pdo->prepare("SELECT * FROM flights WHERE id = ?");
+$stmt->execute([$flight_id]);
+$flight = $stmt->fetch();
+
+if (!$flight) {
+    die("Flight record not found.");
+}
+
+// Ensure the user is authorized.
+if ($flight['user_id'] != $_SESSION['user_id'] && $_SESSION['role'] != 'admin') {
+    die("Unauthorized access.");
+}
+
+// Retrieve aircraft details.
+$aircraftInfo = "";
+if ($flight['aircraft_id'] !== null) {
+    $stmtA = $pdo->prepare("SELECT registration, type FROM aircraft WHERE id = ?");
+    $stmtA->execute([$flight['aircraft_id']]);
+    $aircraft = $stmtA->fetch(PDO::FETCH_ASSOC);
+    if ($aircraft) {
+        $aircraftInfo = htmlspecialchars($aircraft['registration']) . " - " . htmlspecialchars($aircraft['type']);
+    }
+} else {
+    $aircraftInfo = htmlspecialchars($flight['custom_aircraft_details']);
+}
+
+// Function to get base name.
+function getBaseName($pdo, $value) {
+    if (is_numeric($value)) {
+        $stmtB = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+        $stmtB->execute([$value]);
+        $base = $stmtB->fetch(PDO::FETCH_ASSOC);
+        if ($base) {
+            return htmlspecialchars($base['base_name']);
+        }
+    }
+    return htmlspecialchars($value);
+}
+
+$fromName = getBaseName($pdo, $flight['flight_from']);
+$toName   = getBaseName($pdo, $flight['flight_to']);
+
+// Retrieve flight breakdown details.
+$stmtBreakdown = $pdo->prepare("SELECT role, duration_minutes FROM flight_breakdown WHERE flight_id = ?");
+$stmtBreakdown->execute([$flight_id]);
+$breakdowns = $stmtBreakdown->fetchAll();
+
+include('header.php');
+?>
+<div class="flight-view-container">
+  <h2>Full Flight Data</h2>
+  
+  <!-- PDF Download Button opens in a new window -->
+  <div style="margin-bottom:15px;">
+    <a class="btn" href="flight_view_pdf.php?id=<?php echo htmlspecialchars($flight_id); ?>" target="_blank">Download PDF</a>
+  </div>
+  
+  <!-- Flight Details Section -->
+  <h3>Flight Details</h3>
+  <table>
+    <tr>
+      <th>Date</th>
+      <td><?php echo htmlspecialchars($flight['flight_date']); ?></td>
+    </tr>
+    <tr>
+      <th>Aircraft</th>
+      <td><?php echo $aircraftInfo; ?></td>
+    </tr>
+    <tr>
+      <th>From</th>
+      <td><?php echo $fromName; ?></td>
+    </tr>
+    <tr>
+      <th>To</th>
+      <td><?php echo $toName; ?></td>
+    </tr>
+    <tr>
+      <th>Capacity</th>
+      <td><?php echo htmlspecialchars($flight['capacity']); ?></td>
+    </tr>
+    <tr>
+      <th>Pilot Type</th>
+      <td><?php echo htmlspecialchars($flight['pilot_type']); ?></td>
+    </tr>
+    <tr>
+      <th>Crew Names</th>
+      <td><?php echo htmlspecialchars($flight['crew_names']); ?></td>
+    </tr>
+    <tr>
+      <th>Rotors Start</th>
+      <td><?php echo htmlspecialchars($flight['rotors_start']); ?></td>
+    </tr>
+    <tr>
+      <th>Rotors Stop</th>
+      <td><?php echo htmlspecialchars($flight['rotors_stop']); ?></td>
+    </tr>
+    <tr>
+      <th>Flight Duration</th>
+      <td><?php echo htmlspecialchars($flight['flight_duration']); ?></td>
+    </tr>
+  </table>
+  
+  <!-- Flight Role Breakdown Section -->
+  <h3>Flight Role Breakdown</h3>
+  <?php if ($breakdowns): ?>
+  <table>
+    <thead>
+      <tr>
+        <th>Role</th>
+        <th>Duration (minutes)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <?php foreach ($breakdowns as $bd): ?>
+      <tr>
+        <td><?php echo htmlspecialchars($bd['role']); ?></td>
+        <td><?php echo htmlspecialchars($bd['duration_minutes']); ?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php else: ?>
+    <p>No breakdown details available.</p>
+  <?php endif; ?>
+  
+  <!-- NVG Section -->
+  <h3>NVG</h3>
+  <table>
+    <tr>
+      <th>NVG Time (minutes)</th>
+      <td><?php echo htmlspecialchars($flight['nvg_time']); ?></td>
+    </tr>
+    <tr>
+      <th>NVG Takeoffs</th>
+      <td><?php echo htmlspecialchars($flight['nvg_takeoffs']); ?></td>
+    </tr>
+    <tr>
+      <th>NVG Landings</th>
+      <td><?php echo htmlspecialchars($flight['nvg_landings']); ?></td>
+    </tr>
+  </table>
+  
+  <!-- Instrument Flight Section -->
+  <h3>Instrument Flight</h3>
+  <table>
+    <tr>
+      <th>Sim IF</th>
+      <td><?php echo htmlspecialchars($flight['sim_if']); ?></td>
+    </tr>
+    <tr>
+      <th>Act IF</th>
+      <td><?php echo htmlspecialchars($flight['act_if']); ?></td>
+    </tr>
+    <tr>
+      <th>ILS Approaches</th>
+      <td><?php echo htmlspecialchars($flight['ils_approaches']); ?></td>
+    </tr>
+    <tr>
+      <th>RNP</th>
+      <td><?php echo htmlspecialchars($flight['rnp']); ?></td>
+    </tr>
+    <tr>
+      <th>NPA</th>
+      <td><?php echo htmlspecialchars($flight['npa']); ?></td>
+    </tr>
+  </table>
+  
+  <p><a class="btn" href="index.php">Back to Flight Log</a></p>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// footer.php
+?>
+    </main>
+  </div> <!-- End main container -->
+  <footer class="bg-light text-center py-3 mt-4">
+    <div class="container">
+      <p class="mb-0">&copy; <?php echo date("Y"); ?> Flight Log</p>
+    </div>
+  </footer>
+  <!-- Bootstrap JS Bundle (includes Popper) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+<?php
+// forgot_password.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+$message = '';
+$error = [];
+$csrf_token = getCSRFToken();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid CSRF token.";
+    } else {
+        $email = trim($_POST['email']);
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+        
+        if ($user) {
+            // Generate a token and store it.
+            $token = bin2hex(random_bytes(32));
+            $expires_at = date("Y-m-d H:i:s", strtotime("+1 hour"));
+            $stmt = $pdo->prepare("INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES (?, ?, ?)");
+            if ($stmt->execute([$user['id'], $token, $expires_at])) {
+                $reset_link = "http://yourdomain.com/reset_password.php?token=" . urlencode($token);
+                $message = "A password reset link has been generated. For demo purposes, click <a href='" . htmlspecialchars($reset_link) . "'>here</a> to reset your password.";
+            } else {
+                $error[] = "Failed to generate reset token.";
+            }
+        } else {
+            $error[] = "Email address not found.";
+        }
+    }
+}
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Forgot Password</h2>
+  </div>
+  <div class="card-body">
+    <?php
+      foreach ($error as $msg) {
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($msg) . "</div>";
+      }
+      if ($message) {
+          echo "<div class='alert alert-success'>" . $message . "</div>";
+      }
+    ?>
+    <form method="post" action="forgot_password.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      <div class="mb-3">
+        <label for="email" class="form-label">Enter your registered email address:</label>
+        <input type="email" class="form-control" name="email" id="email" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Reset Password</button>
+    </form>
+  </div>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// functions.php
+
+// Set secure session cookie parameters before starting the session.
+if (session_status() === PHP_SESSION_NONE) {
+    // Check if HTTPS is enabled.
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'domain'   => '', // use the default domain
+        'secure'   => $secure,
+        'httponly' => true,
+        'samesite' => 'Strict'
+    ]);
+    session_start();
+}
+
+function generateCSRFToken() {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
+
+function verifyCSRFToken($token) {
+    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+function getCSRFToken() {
+    return generateCSRFToken();
+}
+
+function sanitizeInput($data) {
+    return htmlspecialchars(trim($data), ENT_QUOTES, 'UTF-8');
+}
+
+// Audit logging function.
+if (!function_exists('logAudit')) {
+    function logAudit($pdo, $user_id, $flight_id, $action, $details = "") {
+        $stmt = $pdo->prepare("INSERT INTO audit_trail (user_id, flight_id, action, details) VALUES (?, ?, ?, ?)");
+        $stmt->execute([$user_id, $flight_id, $action, $details]);
+    }
+}
+
+// Helper to convert a base value (numeric id or free text) to a safe base name.
+function getBaseName($pdo, $value) {
+    if (is_numeric($value)) {
+        $stmt = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+        $stmt->execute([$value]);
+        if ($base = $stmt->fetch()) {
+            return htmlspecialchars($base['base_name']);
+        }
+    }
+    return htmlspecialchars($value);
+}
+?>
+<?php
+// header.php
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flight Log</title>
+  <!-- Bootstrap CSS via CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <!-- Google Font: Roboto -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+  <header>
+    <!-- Bootstrap Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="index.php">Flight Log</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="mainNavbar">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <?php if (isset($_SESSION['user_id'])): ?>
+              <li class="nav-item"><a class="nav-link" href="flight_entry.php">New Flight</a></li>
+              <li class="nav-item"><a class="nav-link" href="search.php">Search Flights</a></li>
+              <li class="nav-item"><a class="nav-link" href="export.php">Export CSV</a></li>
+              <li class="nav-item"><a class="nav-link" href="account.php">My Account</a></li>
+              <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                <li class="nav-item"><a class="nav-link" href="admin.php">Admin Panel</a></li>
+              <?php endif; ?>
+            <?php endif; ?>
+          </ul>
+          <ul class="navbar-nav ms-auto">
+            <?php if (isset($_SESSION['user_id'])): ?>
+              <li class="nav-item">
+                <span class="navbar-text">Welcome, <?php echo htmlspecialchars($_SESSION['username']); ?></span>
+              </li>
+              <li class="nav-item"><a class="nav-link" href="logout.php">Logout</a></li>
+            <?php else: ?>
+              <li class="nav-item"><a class="nav-link" href="login.php">Login</a></li>
+              <li class="nav-item"><a class="nav-link" href="register.php">Register</a></li>
+            <?php endif; ?>
+          </ul>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <!-- Begin main container -->
+  <div class="container my-4">
+    <main>
+<?php
+// index.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+include('header.php');
+
+if (isset($_SESSION['user_id'])) {
+
+    // Process statistics time range selection.
+    if (isset($_GET['stats_range'])) {
+        $_SESSION['stats_range'] = $_GET['stats_range'];
+    }
+    $selected_range = $_SESSION['stats_range'] ?? 'all';
+
+    // Build a date filter clause.
+    $date_filter = "";
+    switch ($selected_range) {
+        case 'last7':
+            $date_filter = " AND flight_date >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+            break;
+        case 'month':
+            $date_filter = " AND MONTH(flight_date) = MONTH(CURDATE()) AND YEAR(flight_date) = YEAR(CURDATE())";
+            break;
+        case 'year':
+            $date_filter = " AND YEAR(flight_date) = YEAR(CURDATE())";
+            break;
+        default:
+            break;
+    }
+
+    // Pagination variables.
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+    $perPage = 10;
+    $offset = ($page - 1) * $perPage;
+
+    // Calculate statistics.
+    $stmtStats = $pdo->prepare("
+        SELECT 
+          COUNT(*) AS total_flights, 
+          SEC_TO_TIME(SUM(TIME_TO_SEC(flight_duration))) AS total_flight_time,
+          SUM(nvg_time) AS total_nvg_time,
+          SUM(nvg_takeoffs) AS total_nvg_takeoffs,
+          SUM(nvg_landings) AS total_nvg_landings
+        FROM flights 
+        WHERE user_id = ? $date_filter
+    ");
+    $stmtStats->execute([$_SESSION['user_id']]);
+    $stats = $stmtStats->fetch();
+
+    $totalNVGTime     = $stats['total_nvg_time']     ? $stats['total_nvg_time']     : 0;
+    $totalNVGTakeoffs = $stats['total_nvg_takeoffs'] ? $stats['total_nvg_takeoffs'] : 0;
+    $totalNVGLandings = $stats['total_nvg_landings'] ? $stats['total_nvg_landings'] : 0;
+?>
+<div class="card flight-entry-container mb-4">
+  <div class="card-header">
+    <h2 class="mb-0">Your Flight Statistics (<?php echo ucfirst($selected_range); ?>)</h2>
+  </div>
+  <div class="card-body">
+    <form method="get" action="index.php" class="mb-3">
+      <div class="row g-3 align-items-center">
+        <div class="col-auto">
+          <label for="stats_range" class="col-form-label"><strong>Show statistics for:</strong></label>
+        </div>
+        <div class="col-auto">
+          <select name="stats_range" id="stats_range" class="form-select">
+            <option value="last7" <?php echo ($selected_range=='last7' ? "selected" : ""); ?>>Last 7 days</option>
+            <option value="month" <?php echo ($selected_range=='month' ? "selected" : ""); ?>>Calendar Month</option>
+            <option value="year" <?php echo ($selected_range=='year' ? "selected" : ""); ?>>Year</option>
+            <option value="all" <?php echo ($selected_range=='all' ? "selected" : ""); ?>>All Time</option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <button type="submit" class="btn btn-primary">Update</button>
+        </div>
+      </div>
+    </form>
+    <div>
+      <p><strong>Total Flights:</strong> <?php echo htmlspecialchars($stats['total_flights']); ?></p>
+      <p><strong>Total Flight Time:</strong> <?php echo htmlspecialchars($stats['total_flight_time'] ?: '00:00:00'); ?></p>
+      <p><strong>Total NVG Time:</strong> <?php echo htmlspecialchars($totalNVGTime); ?> minutes</p>
+      <p><strong>Total NVG Takeoffs:</strong> <?php echo htmlspecialchars($totalNVGTakeoffs); ?></p>
+      <p><strong>Total NVG Landings:</strong> <?php echo htmlspecialchars($totalNVGLandings); ?></p>
+    </div>
+  </div>
+</div>
+<?php
+    // Retrieve flight records with pagination.
+    $stmt = $pdo->prepare("SELECT * FROM flights WHERE user_id = ? ORDER BY flight_date DESC LIMIT ? OFFSET ?");
+    $stmt->bindValue(1, $_SESSION['user_id'], PDO::PARAM_INT);
+    $stmt->bindValue(2, $perPage, PDO::PARAM_INT);
+    $stmt->bindValue(3, $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $flights = $stmt->fetchAll();
+
+    // Count total records.
+    $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM flights WHERE user_id = ? $date_filter");
+    $stmtCount->execute([$_SESSION['user_id']]);
+    $totalResults = $stmtCount->fetchColumn();
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Your Flight Log</h2>
+  </div>
+  <div class="card-body">
+    <?php if ($flights): ?>
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Aircraft</th>
+            <th>From</th>
+            <th>To</th>
+            <th>Duration</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($flights as $flight): ?>
+            <tr>
+              <td><?php echo htmlspecialchars($flight['flight_date']); ?></td>
+              <?php
+              if ($flight['aircraft_id'] !== null) {
+                  $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
+                  $stmt2->execute([$flight['aircraft_id']]);
+                  $aircraft = $stmt2->fetch(PDO::FETCH_ASSOC);
+                  $aircraft_reg = ($aircraft !== false && isset($aircraft['registration'])) ? $aircraft['registration'] : 'Unknown';
+                  echo "<td>" . htmlspecialchars($aircraft_reg) . "</td>";
+              } else {
+                  echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
+              }
+              ?>
+              <?php
+              $from = $flight['flight_from'];
+              if (is_numeric($from)) {
+                  $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                  $stmtFrom->execute([$from]);
+                  $baseData = $stmtFrom->fetch();
+                  if ($baseData) {
+                      $from = $baseData['base_name'];
+                  }
+              }
+              echo "<td>" . htmlspecialchars($from) . "</td>";
+              $to = $flight['flight_to'];
+              if (is_numeric($to)) {
+                  $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                  $stmtTo->execute([$to]);
+                  $baseData = $stmtTo->fetch();
+                  if ($baseData) {
+                      $to = $baseData['base_name'];
+                  }
+              }
+              echo "<td>" . htmlspecialchars($to) . "</td>";
+              ?>
+              <td><?php echo htmlspecialchars($flight['flight_duration']); ?></td>
+              <td>
+                <a class="btn btn-sm btn-secondary" href="flight_view.php?id=<?php echo htmlspecialchars($flight['id']); ?>">View</a>
+                <a class="btn btn-sm btn-warning" href="flight_edit.php?id=<?php echo htmlspecialchars($flight['id']); ?>">Edit</a>
+                <form method="post" action="flight_delete.php" class="d-inline" onsubmit="return confirm('Are you sure?');">
+                  <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+                  <input type="hidden" name="id" value="<?php echo htmlspecialchars($flight['id']); ?>">
+                  <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php
+      $totalPages = ceil($totalResults / $perPage);
+      ?>
+      <nav>
+        <ul class="pagination">
+          <?php for ($i = 1; $i <= $totalPages; $i++): ?>
+            <?php if ($i == $page): ?>
+              <li class="page-item active"><span class="page-link"><?php echo $i; ?></span></li>
+            <?php else: 
+              $queryParams = $_GET;
+              $queryParams['page'] = $i;
+              $queryString = http_build_query($queryParams);
+            ?>
+              <li class="page-item"><a class="page-link" href="index.php?<?php echo $queryString; ?>"><?php echo $i; ?></a></li>
+            <?php endif; ?>
+          <?php endfor; ?>
+        </ul>
+      </nav>
+    <?php else: ?>
+      <p>No flight records found. Start by adding a new flight.</p>
+    <?php endif; ?>
+  </div>
+</div>
+<?php
+} else {
+    echo "<div class='card flight-entry-container'><div class='card-body'>";
+    echo "<h2>Welcome to the Flight Log</h2>";
+    echo "<p>Please <a href='login.php'>login</a> or <a href='register.php'>register</a> to view your flight records and statistics.</p>";
+    echo "</div></div>";
+}
+
+include('footer.php');
+?>
+<?php
+// install.php - Flight Log Installer
+if (file_exists('installed.lock')) {
+    echo "<div class='container my-4'><div class='alert alert-info'><h2>Installation Already Completed</h2><p>The system appears to be already installed. To reinstall, please remove the 'installed.lock' file.</p></div></div>";
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $db_host     = trim($_POST['db_host']);
+    $db_username = trim($_POST['db_username']);
+    $db_password = $_POST['db_password'];
+    $db_name     = trim($_POST['db_name']);
+
+    try {
+        $pdo = new PDO("mysql:host=$db_host", $db_username, $db_password);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->exec("CREATE DATABASE IF NOT EXISTS `$db_name` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        $pdo->exec("USE `$db_name`");
+        $sql_file = 'database.sql';
+        if (!file_exists($sql_file)) {
+            die("Error: 'database.sql' file not found.");
+        }
+        $sql_commands = file_get_contents($sql_file);
+        $commands = array_filter(array_map('trim', explode(";", $sql_commands)));
+        foreach ($commands as $command) {
+            if (!empty($command)) {
+                $pdo->exec($command);
+            }
+        }
+        $config_content = "<?php\n";
+        $config_content .= "// db.php generated by installer\n";
+        $config_content .= "\$host = '" . addslashes($db_host) . "';\n";
+        $config_content .= "\$db   = '" . addslashes($db_name) . "';\n";
+        $config_content .= "\$user = '" . addslashes($db_username) . "';\n";
+        $config_content .= "\$pass = '" . addslashes($db_password) . "';\n";
+        $config_content .= "\$charset = 'utf8mb4';\n\n";
+        $config_content .= "\$options = [\n";
+        $config_content .= "    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,\n";
+        $config_content .= "    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,\n";
+        $config_content .= "    PDO::ATTR_EMULATE_PREPARES   => false,\n";
+        $config_content .= "];\n\n";
+        $config_content .= "try {\n";
+        $config_content .= "    \$pdo = new PDO(\"mysql:host=\$host;dbname=\$db;charset=\$charset\", \$user, \$pass, \$options);\n";
+        $config_content .= "} catch (\\PDOException \$e) {\n";
+        $config_content .= "    throw new \\PDOException(\$e->getMessage(), (int)\$e->getCode());\n";
+        $config_content .= "}\n";
+        file_put_contents('db.php', $config_content);
+        file_put_contents('installed.lock', 'Installed on ' . date('Y-m-d H:i:s'));
+        echo "<div class='container my-4'><div class='alert alert-success'><h2>Installation Successful</h2><p>The Flight Log website has been installed successfully.</p><p><strong>Important:</strong> For security, please remove or rename the <code>install.php</code> file.</p></div></div>";
+    } catch (PDOException $e) {
+        echo "<div class='container my-4'><div class='alert alert-danger'><h2>Installation Error</h2><p>Error: " . htmlspecialchars($e->getMessage()) . "</p></div></div>";
+    }
+} else {
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flight Log Installer</title>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <div class="container my-4">
+    <div class="card">
+      <div class="card-header">
+        <h2>Flight Log Installer</h2>
+      </div>
+      <div class="card-body">
+        <p>Please enter your database credentials below. (Ensure the MySQL user has sufficient privileges.)</p>
+        <form method="post" action="install.php">
+          <div class="mb-3">
+            <label for="db_host" class="form-label">Database Host:</label>
+            <input type="text" class="form-control" name="db_host" id="db_host" value="localhost" required>
+          </div>
+          <div class="mb-3">
+            <label for="db_username" class="form-label">Database Username:</label>
+            <input type="text" class="form-control" name="db_username" id="db_username" required>
+          </div>
+          <div class="mb-3">
+            <label for="db_password" class="form-label">Database Password:</label>
+            <input type="password" class="form-control" name="db_password" id="db_password" required>
+          </div>
+          <div class="mb-3">
+            <label for="db_name" class="form-label">Database Name:</label>
+            <input type="text" class="form-control" name="db_name" id="db_name" value="flightlog" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Install</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+<?php
+}
+?>
+<?php
+// login.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+$error = [];
+$csrf_token = getCSRFToken();
+
+if (isset($_SESSION['user_id'])) {
+    header("Location: index.php");
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid CSRF token.";
+    } else {
+        $username = trim($_POST['username']);
+        $password = $_POST['password'];
+        
+        $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
+        $stmt->execute([$username]);
+        $user = $stmt->fetch();
+        
+        if ($user && password_verify($password, $user['password'])) {
+            session_regenerate_id(true);
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['role'] = $user['role'];
+            header("Location: index.php");
+            exit;
+        } else {
+            $error[] = "Invalid username or password.";
+        }
+    }
+}
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Login</h2>
+  </div>
+  <div class="card-body">
+    <?php
+      foreach ($error as $msg) {
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($msg) . "</div>";
+      }
+    ?>
+    <form method="post" action="login.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      <div class="mb-3">
+        <label for="username" class="form-label">Username:</label>
+        <input type="text" class="form-control" name="username" id="username" required>
+      </div>
+      <div class="mb-3">
+        <label for="password" class="form-label">Password:</label>
+        <input type="password" class="form-control" name="password" id="password" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Login</button>
+    </form>
+    <p class="mt-3"><a href="forgot_password.php">Forgot Password?</a></p>
+  </div>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// logout.php
+session_start();
+session_destroy();
+header("Location: index.php");
+exit;
+?>
+<?php
+// register.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+$error = [];
+$csrf_token = getCSRFToken();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid CSRF token.";
+    } else {
+        $username = trim($_POST['username']);
+        $email = trim($_POST['email']);
+        $password = $_POST['password'];
+        $default_role = $_POST['default_role'];
+        
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error[] = "Invalid email format.";
+        } else {
+            $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+            $stmt->execute([$username, $email]);
+            if ($stmt->fetch()) {
+                $error[] = "Username or Email already taken.";
+            } else {
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                $stmt = $pdo->prepare("INSERT INTO users (username, email, password, default_role) VALUES (?, ?, ?, ?)");
+                if ($stmt->execute([$username, $email, $hashed_password, $default_role])) {
+                    header("Location: login.php");
+                    exit;
+                } else {
+                    $error[] = "Registration failed. Please try again.";
+                }
+            }
+        }
+    }
+}
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Register</h2>
+  </div>
+  <div class="card-body">
+    <?php
+      foreach ($error as $msg) {
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($msg) . "</div>";
+      }
+    ?>
+    <form method="post" action="register.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      <div class="mb-3">
+        <label for="username" class="form-label">Username:</label>
+        <input type="text" class="form-control" name="username" id="username" required>
+      </div>
+      <div class="mb-3">
+        <label for="email" class="form-label">Email:</label>
+        <input type="email" class="form-control" name="email" id="email" required>
+      </div>
+      <div class="mb-3">
+        <label for="password" class="form-label">Password:</label>
+        <input type="password" class="form-control" name="password" id="password" required>
+      </div>
+      <div class="mb-3">
+        <label for="default_role" class="form-label">Default Role:</label>
+        <select class="form-select" name="default_role" id="default_role">
+          <option value="pilot">Pilot</option>
+          <option value="crew">Crew</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Register</button>
+    </form>
+  </div>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// reset_password.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+$error = [];
+$message = '';
+$token = isset($_GET['token']) ? $_GET['token'] : '';
+
+if (!$token) {
+    die("Invalid token.");
+}
+
+$stmt = $pdo->prepare("SELECT * FROM password_reset_tokens WHERE token = ? AND used = 0 AND expires_at > NOW()");
+$stmt->execute([$token]);
+$tokenData = $stmt->fetch();
+
+if (!$tokenData) {
+    die("Invalid or expired token.");
+}
+
+$csrf_token = getCSRFToken();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
+        $error[] = "Invalid CSRF token.";
+    } else {
+        $new_password = $_POST['password'];
+        $hashed = password_hash($new_password, PASSWORD_DEFAULT);
+        
+        $stmt = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
+        if ($stmt->execute([$hashed, $tokenData['user_id']])) {
+            $stmt = $pdo->prepare("UPDATE password_reset_tokens SET used = 1 WHERE id = ?");
+            $stmt->execute([$tokenData['id']]);
+            $message = "Password has been reset successfully. <a href='login.php'>Login here</a>.";
+        } else {
+            $error[] = "Failed to reset password.";
+        }
+    }
+}
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Reset Password</h2>
+  </div>
+  <div class="card-body">
+    <?php
+      foreach ($error as $msg) {
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($msg) . "</div>";
+      }
+      if ($message) {
+          echo "<div class='alert alert-success'>" . $message . "</div>";
+      } else {
+    ?>
+    <form method="post" action="reset_password.php?token=<?php echo htmlspecialchars($token); ?>">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      <div class="mb-3">
+        <label for="password" class="form-label">New Password:</label>
+        <input type="password" class="form-control" name="password" id="password" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Reset Password</button>
+    </form>
+    <?php } ?>
+  </div>
+</div>
+<?php include('footer.php'); ?>
+<?php
+// search.php
+session_start();
+require_once('db.php');
+require_once('functions.php');
+
+if (!isset($_SESSION['user_id'])) {
+    header("Location: login.php");
+    exit;
+}
+
+$searchQuery = "";
+$start_date  = "";
+$end_date    = "";
+$sort = "flight_date DESC";
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$perPage = 10;
+$offset = ($page - 1) * $perPage;
+
+$whereClauses = ["f.user_id = ?"];
+$params = [$_SESSION['user_id']];
+
+if (isset($_GET['search']) && trim($_GET['search']) !== "") {
+    $searchQuery = trim($_GET['search']);
+    $whereClauses[] = "(f.flight_from LIKE ? OR f.flight_to LIKE ? OR a.registration LIKE ?)";
+    $likeQuery = "%$searchQuery%";
+    $params[] = $likeQuery;
+    $params[] = $likeQuery;
+    $params[] = $likeQuery;
+}
+
+if (isset($_GET['start_date']) && trim($_GET['start_date']) !== "") {
+    $start_date = $_GET['start_date'];
+    $whereClauses[] = "f.flight_date >= ?";
+    $params[] = $start_date;
+}
+
+if (isset($_GET['end_date']) && trim($_GET['end_date']) !== "") {
+    $end_date = $_GET['end_date'];
+    $whereClauses[] = "f.flight_date <= ?";
+    $params[] = $end_date;
+}
+
+$whereSQL = implode(" AND ", $whereClauses);
+
+// Count total results.
+$stmtCount = $pdo->prepare("SELECT COUNT(*) FROM flights f JOIN aircraft a ON f.aircraft_id = a.id WHERE $whereSQL");
+$stmtCount->execute($params);
+$totalResults = $stmtCount->fetchColumn();
+
+// Retrieve flight records with pagination.
+$query = "SELECT f.*, a.registration FROM flights f JOIN aircraft a ON f.aircraft_id = a.id WHERE $whereSQL ORDER BY $sort LIMIT ? OFFSET ?";
+$stmt = $pdo->prepare($query);
+
+$paramIndex = 1;
+foreach ($params as $param) {
+    $stmt->bindValue($paramIndex, $param);
+    $paramIndex++;
+}
+
+$stmt->bindValue($paramIndex, $perPage, PDO::PARAM_INT);
+$paramIndex++;
+$stmt->bindValue($paramIndex, $offset, PDO::PARAM_INT);
+
+$stmt->execute();
+$flights = $stmt->fetchAll();
+
+$csrf_token = getCSRFToken();
+
+include('header.php');
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Search Flight Records</h2>
+  </div>
+  <div class="card-body">
+    <form method="get" action="search.php" class="mb-4">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label for="search" class="form-label">Search (From, To, Aircraft):</label>
+          <input type="text" class="form-control" name="search" id="search" value="<?php echo htmlspecialchars($searchQuery); ?>">
+        </div>
+        <div class="col-md-4">
+          <label for="start_date" class="form-label">Start Date:</label>
+          <input type="date" class="form-control" name="start_date" id="start_date" value="<?php echo htmlspecialchars($start_date); ?>">
+        </div>
+        <div class="col-md-4">
+          <label for="end_date" class="form-label">End Date:</label>
+          <input type="date" class="form-control" name="end_date" id="end_date" value="<?php echo htmlspecialchars($end_date); ?>">
+        </div>
+      </div>
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary">Search</button>
+      </div>
+    </form>
+    <?php
+    if ($flights) {
+        echo "<table class='table table-striped'>";
+        echo "<thead><tr>
+                <th>Date</th>
+                <th>Aircraft</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Duration</th>
+                <th>Actions</th>
+              </tr></thead><tbody>";
+        foreach ($flights as $flight) {
+            echo "<tr>";
+            echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
+            if ($flight['aircraft_id'] !== null) {
+                $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
+                $stmt2->execute([$flight['aircraft_id']]);
+                $aircraft = $stmt2->fetch(PDO::FETCH_ASSOC);
+                $aircraft_reg = ($aircraft !== false && isset($aircraft['registration'])) ? $aircraft['registration'] : 'Unknown';
+                echo "<td>" . htmlspecialchars($aircraft_reg) . "</td>";
+            } else {
+                echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
+            }
+            $from = $flight['flight_from'];
+            if (is_numeric($from)) {
+                $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                $stmtFrom->execute([$from]);
+                $baseData = $stmtFrom->fetch();
+                if ($baseData) {
+                    $from = $baseData['base_name'];
+                }
+            }
+            echo "<td>" . htmlspecialchars($from) . "</td>";
+            $to = $flight['flight_to'];
+            if (is_numeric($to)) {
+                $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                $stmtTo->execute([$to]);
+                $baseData = $stmtTo->fetch();
+                if ($baseData) {
+                    $to = $baseData['base_name'];
+                }
+            }
+            echo "<td>" . htmlspecialchars($to) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
+            echo "<td>";
+            echo "<a class='btn btn-sm btn-secondary' href='flight_view.php?id=" . htmlspecialchars($flight['id']) . "'>View</a> ";
+            echo "<a class='btn btn-sm btn-warning' href='flight_edit.php?id=" . htmlspecialchars($flight['id']) . "'>Edit</a> ";
+            echo "<form method='post' action='flight_delete.php' class='d-inline' onsubmit='return confirm(\"Are you sure?\");'>";
+            echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars($csrf_token) . "'>";
+            echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
+            echo "<button type='submit' class='btn btn-sm btn-danger'>Delete</button>";
+            echo "</form>";
+            echo "</td>";
+            echo "</tr>";
+        }
+        echo "</tbody></table>";
+      
+        $totalPages = ceil($totalResults / $perPage);
+        echo "<nav><ul class='pagination'>";
+        for ($i = 1; $i <= $totalPages; $i++) {
+            if ($i == $page) {
+                echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+            } else {
+                $queryParams = $_GET;
+                $queryParams['page'] = $i;
+                $queryString = http_build_query($queryParams);
+                echo "<li class='page-item'><a class='page-link' href='search.php?$queryString'>$i</a></li>";
+            }
+        }
+        echo "</ul></nav>";
+    } else {
+        echo "<p>No flight records found.</p>";
+    }
+    ?>
+  </div>
+</div>
+<?php include('footer.php'); ?>
+-- Drop the database if it already exists.
+DROP DATABASE IF EXISTS flightlog;
+CREATE DATABASE flightlog;
+USE flightlog;
+
+-- Table: bases (Organization bases)
+CREATE TABLE IF NOT EXISTS bases (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  base_name VARCHAR(100) NOT NULL,
+  base_code VARCHAR(50) DEFAULT NULL,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: users
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  email VARCHAR(100) UNIQUE NOT NULL,
+  password VARCHAR(255) NOT NULL,
+  role ENUM('user','admin') DEFAULT 'user',
+  default_role ENUM('pilot','crew') DEFAULT 'pilot',
+  default_base INT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (default_base) REFERENCES bases(id)
+);
+
+-- Table: aircraft
+CREATE TABLE IF NOT EXISTS aircraft (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  registration VARCHAR(20) UNIQUE NOT NULL,
+  type VARCHAR(50) NOT NULL,
+  manufacturer_serial VARCHAR(50),
+  subtype VARCHAR(50),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table: flights
+CREATE TABLE IF NOT EXISTS flights (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  flight_date DATE NOT NULL,
+  aircraft_id INT DEFAULT NULL,
+  custom_aircraft_details VARCHAR(255) DEFAULT NULL,
+  flight_from VARCHAR(100) NOT NULL,
+  flight_to VARCHAR(100) NOT NULL,
+  capacity ENUM('pilot','crew') NOT NULL,
+  pilot_type ENUM('single','multi') NOT NULL,
+  crew_names VARCHAR(255) DEFAULT NULL,
+  rotors_start TIME NOT NULL,
+  rotors_stop TIME NOT NULL,
+  flight_duration TIME NOT NULL,
+  -- New NVG fields
+  nvg_time INT DEFAULT 0,
+  nvg_takeoffs INT DEFAULT 0,
+  nvg_landings INT DEFAULT 0,
+  -- New Instrument Flight fields
+  sim_if TIME DEFAULT NULL,
+  act_if TIME DEFAULT NULL,
+  ils_approaches INT DEFAULT 0,
+  rnp INT DEFAULT 0,
+  npa INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id),
+  FOREIGN KEY (aircraft_id) REFERENCES aircraft(id)
+);
+
+-- Table: flight_breakdown (stores breakdown of flight time by role)
+CREATE TABLE IF NOT EXISTS flight_breakdown (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  flight_id INT NOT NULL,
+  role VARCHAR(50) NOT NULL,
+  duration_minutes INT NOT NULL,
+  FOREIGN KEY (flight_id) REFERENCES flights(id)
+);
+
+-- Table: password_reset_tokens
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token VARCHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  used TINYINT(1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Table: audit_trail
+CREATE TABLE IF NOT EXISTS audit_trail (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  flight_id INT DEFAULT NULL,
+  action VARCHAR(20) NOT NULL,
+  details TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
