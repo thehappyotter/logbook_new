@@ -67,8 +67,10 @@ include('header.php');
 ?>
 <div class="flight-view-container">
   <h2>Full Flight Data</h2>
+  
+  <!-- PDF Download Button opens in a new window -->
   <div style="margin-bottom:15px;">
-    <a class="btn" href="flight_view_pdf.php?id=<?php echo htmlspecialchars($flight_id); ?>">Download PDF</a>
+    <a class="btn" href="flight_view_pdf.php?id=<?php echo htmlspecialchars($flight_id); ?>" target="_blank">Download PDF</a>
   </div>
   
   <!-- Flight Details Section -->

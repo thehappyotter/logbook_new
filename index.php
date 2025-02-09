@@ -139,13 +139,12 @@ if (isset($_SESSION['user_id'])) {
             echo "<td>" . htmlspecialchars($to) . "</td>";
             echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
             echo "<td>";
-            // Use styled buttons (with class "btn") for all actions.
             echo "<a class='btn' href='flight_view.php?id=" . htmlspecialchars($flight['id']) . "'>Full Details</a> ";
             echo "<a class='btn' href='flight_edit.php?id=" . htmlspecialchars($flight['id']) . "'>Edit</a> ";
-            echo "<form method='post' action='flight_delete.php' style='display:inline;' onsubmit='return confirm(\"Are you sure?\");'>";
+            echo "<form method='post' action='flight_delete.php' style='display:inline-block; vertical-align: middle;' onsubmit='return confirm(\"Are you sure?\");'>";
             echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars(getCSRFToken()) . "'>";
             echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
-            echo "<input class='btn' type='submit' value='Delete'>";
+            echo "<button type='submit' class='btn'>Delete</button>";
             echo "</form>";
             echo "</td>";
             echo "</tr>";
