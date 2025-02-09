@@ -149,9 +149,14 @@ include('header.php');
           echo "<td>" . htmlspecialchars($flight['rnp']) . "</td>";
           echo "<td>" . htmlspecialchars($flight['npa']) . "</td>";
           echo "<td>";
-          echo "<a href='flight_view.php?id=" . $flight['id'] . "'>View Full Flight Data</a> | ";
-          echo "<a href='flight_edit.php?id=" . $flight['id'] . "'>Edit</a> | ";
-          echo "<a href='flight_delete.php?id=" . $flight['id'] . "' onclick='return confirm(\"Are you sure?\");'>Delete</a>";
+          echo "<a href='flight_view.php?id=" . htmlspecialchars($flight['id']) . "'>View Full Flight Data</a> | ";
+          echo "<a href='flight_edit.php?id=" . htmlspecialchars($flight['id']) . "'>Edit</a> | ";
+          // Use a POST form for deletion with CSRF protection.
+          echo "<form method='post' action='flight_delete.php' style='display:inline-block; vertical-align: middle;' onsubmit='return confirm(\"Are you sure?\");'>";
+          echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars($csrf_token) . "'>";
+          echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
+          echo "<button type='submit' class='btn'>Delete</button>";
+          echo "</form>";
           echo "</td>";
           echo "</tr>";
       }
