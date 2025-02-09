@@ -27,7 +27,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['export'])) {
     }
     $whereSQL = implode(" AND ", $whereClauses);
 
-    // Retrieve matching flight records (removed notes column)
+    // Retrieve matching flight records
     $stmt = $pdo->prepare("SELECT flight_date, aircraft_id, custom_aircraft_details, flight_from, flight_to, flight_duration 
                            FROM flights 
                            WHERE $whereSQL 
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['export'])) {
     header('Content-Disposition: attachment; filename="flight_log_export.csv"');
 
     $output = fopen('php://output', 'w');
-    // CSV header row (removed "Notes")
+    // CSV header row
     fputcsv($output, ['Date', 'Aircraft', 'From', 'To', 'Duration']);
     // Loop through flights and write CSV rows.
     foreach ($flights as $flight) {
@@ -83,27 +83,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['export'])) {
     fclose($output);
     exit;
 } else {
-    // Show the export form
     include('header.php');
-    ?>
-    <div class="flight-entry-container">
-      <h2>Export Flight Log</h2>
-      <form method="post" action="export.php">
-        <div class="form-group">
-          <label for="start_date">Start Date (optional):</label>
-          <input type="date" name="start_date" id="start_date">
-        </div>
-        <div class="form-group">
-          <label for="end_date">End Date (optional):</label>
-          <input type="date" name="end_date" id="end_date">
-        </div>
-        <!-- Additional filters can be added here -->
-        <div class="form-group">
-          <input type="submit" name="export" value="Export CSV">
-        </div>
-      </form>
-    </div>
-    <?php
+    $csrf_token = getCSRFToken();
+?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Export Flight Log</h2>
+  </div>
+  <div class="card-body">
+    <form method="post" action="export.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      <div class="mb-3">
+        <label for="start_date" class="form-label">Start Date (optional):</label>
+        <input type="date" class="form-control" name="start_date" id="start_date">
+      </div>
+      <div class="mb-3">
+        <label for="end_date" class="form-label">End Date (optional):</label>
+        <input type="date" class="form-control" name="end_date" id="end_date">
+      </div>
+      <button type="submit" name="export" class="btn btn-primary">Export CSV</button>
+    </form>
+  </div>
+</div>
+<?php
     include('footer.php');
 }
 ?>

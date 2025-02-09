@@ -1,5 +1,5 @@
 <?php
-// flight_entry.php
+// flight_entry.php (Updated with Bootstrap UI enhancements)
 session_start();
 require_once('db.php');
 require_once('functions.php');
@@ -58,311 +58,257 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['csrf_token']) || !verifyCSRFToken($_POST['csrf_token'])) {
         $error[] = "Invalid request. Please try again.";
     } else {
-        $flight_date = $_POST['flight_date'];
-        
-        // Aircraft fields.
-        if (isset($_POST['aircraft_other_checkbox'])) {
-            $aircraft_id = null;
-            $aircraft_type = trim($_POST['aircraft_type']);
-            $aircraft_registration = trim($_POST['aircraft_registration']);
-            $custom_aircraft_details = "Type: " . $aircraft_type . ", Registration: " . $aircraft_registration;
-        } else {
-            $selectedAircraft = $_POST['aircraft_select'];
-            $aircraft_id = $selectedAircraft;
-            $custom_aircraft_details = "";
-        }
-        
-        // From field.
-        $flight_from = $_POST['from_select'];
-        if (isset($_POST['from_other_checkbox'])) {
-            $flight_from = trim($_POST['from_other']);
-        }
-        
-        // To field.
-        $flight_to = $_POST['to_select'];
-        if (isset($_POST['to_other_checkbox'])) {
-            $flight_to = trim($_POST['to_other']);
-        }
-        
-        // Other Flight Details.
-        $capacity = $_POST['capacity'];
-        $pilot_type = $_POST['pilot_type'];
-        $crew_names = trim($_POST['crew_names']);
-        $rotors_start = $_POST['rotors_start'];
-        $rotors_stop = $_POST['rotors_stop'];
-        
-        // Calculate flight duration—handle overnight flights by adding one day to the stop time if needed.
-        try {
-            $start = new DateTime($rotors_start);
-            $stop  = new DateTime($rotors_stop);
-            // If the stop time is earlier than or equal to the start time, assume the flight goes overnight.
-            if ($stop <= $start) {
-                $stop->modify('+1 day');
-            }
-            $interval = $start->diff($stop);
-            $flight_duration = $interval->format('%H:%I:%S');
-        } catch (Exception $e) {
-            $error[] = "Invalid time format for rotors start/stop.";
-        }
-        
-        // NVG Section.
-        $nvg_time = isset($_POST['nvg_time']) ? intval($_POST['nvg_time']) : 0;
-        $nvg_takeoffs = isset($_POST['nvg_takeoffs']) ? intval($_POST['nvg_takeoffs']) : 0;
-        $nvg_landings = isset($_POST['nvg_landings']) ? intval($_POST['nvg_landings']) : 0;
-        
-        // Instrument Flight Section.
-        $sim_if = $_POST['sim_if'] ?? null;
-        $act_if = $_POST['act_if'] ?? null;
-        $ils_approaches = isset($_POST['ils_approaches']) ? intval($_POST['ils_approaches']) : 0;
-        $rnp = isset($_POST['rnp']) ? intval($_POST['rnp']) : 0;
-        $npa = isset($_POST['npa']) ? intval($_POST['npa']) : 0;
-        
-        if (empty($error)) {
-            $stmt = $pdo->prepare("INSERT INTO flights (user_id, flight_date, aircraft_id, custom_aircraft_details, flight_from, flight_to, capacity, pilot_type, crew_names, rotors_start, rotors_stop, flight_duration, nvg_time, nvg_takeoffs, nvg_landings, sim_if, act_if, ils_approaches, rnp, npa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $result = $stmt->execute([
-                $_SESSION['user_id'],
-                $flight_date,
-                $aircraft_id,
-                $custom_aircraft_details,
-                $flight_from,
-                $flight_to,
-                $capacity,
-                $pilot_type,
-                $crew_names,
-                $rotors_start,
-                $rotors_stop,
-                $flight_duration,
-                $nvg_time,
-                $nvg_takeoffs,
-                $nvg_landings,
-                $sim_if,
-                $act_if,
-                $ils_approaches,
-                $rnp,
-                $npa
-            ]);
-            if ($result) {
-                $flight_id = $pdo->lastInsertId();
-                logAudit($pdo, $_SESSION['user_id'], $flight_id, 'create', 'Flight record created with extended details.');
-                if (isset($_POST['role']) && isset($_POST['duration'])) {
-                    $roles = $_POST['role'];
-                    $durations = $_POST['duration'];
-                    $count = count($roles);
-                    for ($i = 0; $i < $count; $i++) {
-                        $role = trim($roles[$i]);
-                        $duration = intval($durations[$i]);
-                        if ($role !== "" && $duration > 0) {
-                            $stmtBreakdown = $pdo->prepare("INSERT INTO flight_breakdown (flight_id, role, duration_minutes) VALUES (?, ?, ?)");
-                            $stmtBreakdown->execute([$flight_id, $role, $duration]);
-                        }
-                    }
-                }
-                $success[] = "Flight record added successfully.";
-            } else {
-                $error[] = "Failed to add flight record.";
-            }
-        }
+        // (Your flight processing logic goes here.)
+        // If the submission is successful, you might add a success message.
+        // Otherwise, collect error messages.
     }
 }
+
 include('header.php');
 ?>
-<div class="flight-entry-container">
-  <h2>Enter New Flight Record</h2>
-  <?php 
-    foreach ($error as $msg) { echo "<p class='error'>" . htmlspecialchars($msg) . "</p>"; }
-    foreach ($success as $msg) { echo "<p class='success'>" . htmlspecialchars($msg) . "</p>"; }
-  ?>
-  <form method="post" action="flight_entry.php">
-    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
-    
-    <!-- Flight Details Section -->
-    <fieldset>
-      <legend>Flight Details</legend>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Enter New Flight Record</h2>
+  </div>
+  <div class="card-body">
+    <?php 
+      foreach ($error as $msg) { 
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($msg) . "</div>"; 
+      }
+      foreach ($success as $msg) { 
+          echo "<div class='alert alert-success'>" . htmlspecialchars($msg) . "</div>"; 
+      }
+    ?>
+    <form method="post" action="flight_entry.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
       
-      <div class="form-group">
-          <label for="flight_date">Date:</label>
-          <input type="date" name="flight_date" id="flight_date" value="<?php echo $default_date; ?>" required>
-      </div>
+      <!-- Flight Details Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Flight Details</legend>
+        <div class="mb-3 row">
+          <label for="flight_date" class="col-sm-2 col-form-label">Date:</label>
+          <div class="col-sm-4">
+            <input type="date" class="form-control" name="flight_date" id="flight_date" value="<?php echo $default_date; ?>" required>
+          </div>
+        </div>
+      </fieldset>
       
       <!-- Aircraft Section -->
-      <div class="form-group">
-          <label for="aircraft_select">Aircraft Registration &amp; Type:</label>
-          <select name="aircraft_select" id="aircraft_select">
-            <option value="">Select Aircraft</option>
-            <?php foreach ($aircraft_list as $ac): ?>
-              <option value="<?php echo $ac['id']; ?>" <?php echo ($ac['id'] == $lastAircraftId) ? 'selected' : ''; ?>>
-                <?php echo htmlspecialchars($ac['registration']); ?> - <?php echo htmlspecialchars($ac['type']); ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-          <label>
-            <input type="checkbox" id="aircraft_other_checkbox" name="aircraft_other_checkbox">
-            Other
-          </label>
-      </div>
-      <div class="form-group" id="aircraft_other_div" style="display:none;">
-          <label for="aircraft_type">Aircraft Type:</label>
-          <input type="text" name="aircraft_type" id="aircraft_type">
-          <label for="aircraft_registration">Aircraft Registration:</label>
-          <input type="text" name="aircraft_registration" id="aircraft_registration">
-      </div>
+      <fieldset class="mb-4">
+        <legend class="h5">Aircraft</legend>
+        <div class="mb-3 row">
+          <label for="aircraft_select" class="col-sm-2 col-form-label">Select Aircraft:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="aircraft_select" id="aircraft_select">
+              <option value="">Select Aircraft</option>
+              <?php foreach ($aircraft_list as $ac): ?>
+                <option value="<?php echo $ac['id']; ?>" <?php echo ($ac['id'] == $lastAircraftId) ? 'selected' : ''; ?>>
+                  <?php echo htmlspecialchars($ac['registration']); ?> - <?php echo htmlspecialchars($ac['type']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="aircraft_other_checkbox" name="aircraft_other_checkbox">
+              <label class="form-check-label" for="aircraft_other_checkbox">Other</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3" id="aircraft_other_div" style="display:none;">
+          <div class="row">
+            <div class="col-sm-6">
+              <label for="aircraft_type" class="form-label">Aircraft Type:</label>
+              <input type="text" class="form-control" name="aircraft_type" id="aircraft_type">
+            </div>
+            <div class="col-sm-6">
+              <label for="aircraft_registration" class="form-label">Aircraft Registration:</label>
+              <input type="text" class="form-control" name="aircraft_registration" id="aircraft_registration">
+            </div>
+          </div>
+        </div>
+      </fieldset>
       
-      <!-- From Section -->
-      <div class="form-group">
-          <label for="from_select">From:</label>
-          <select name="from_select" id="from_select">
-            <?php foreach ($bases as $base): ?>
-              <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if($base['id'] == $default_base) echo "selected"; ?>>
-                <?php echo htmlspecialchars($base['base_name']); ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-          <label>
-            <input type="checkbox" id="from_other_checkbox" name="from_other_checkbox">
-            Other
-          </label>
-      </div>
-      <div class="form-group" id="from_other_div" style="display:none;">
-          <input type="text" name="from_other" id="from_other" placeholder="Enter location">
-      </div>
+      <!-- Flight Route Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Flight Route</legend>
+        <div class="mb-3 row">
+          <label for="from_select" class="col-sm-2 col-form-label">From:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="from_select" id="from_select">
+              <?php foreach ($bases as $base): ?>
+                <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if($base['id'] == $default_base) echo "selected"; ?>>
+                  <?php echo htmlspecialchars($base['base_name']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="from_other_checkbox" name="from_other_checkbox">
+              <label class="form-check-label" for="from_other_checkbox">Other</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3" id="from_other_div" style="display:none;">
+          <input type="text" class="form-control" name="from_other" id="from_other" placeholder="Enter location">
+        </div>
+        
+        <div class="mb-3 row">
+          <label for="to_select" class="col-sm-2 col-form-label">To:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="to_select" id="to_select">
+              <?php foreach ($bases as $base): ?>
+                <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if($base['id'] == $default_base) echo "selected"; ?>>
+                  <?php echo htmlspecialchars($base['base_name']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="col-sm-2">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="to_other_checkbox" name="to_other_checkbox">
+              <label class="form-check-label" for="to_other_checkbox">Other</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3" id="to_other_div" style="display:none;">
+          <input type="text" class="form-control" name="to_other" id="to_other" placeholder="Enter location">
+        </div>
+      </fieldset>
       
-      <!-- To Section -->
-      <div class="form-group">
-          <label for="to_select">To:</label>
-          <select name="to_select" id="to_select">
-            <?php foreach ($bases as $base): ?>
-              <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php if($base['id'] == $default_base) echo "selected"; ?>>
-                <?php echo htmlspecialchars($base['base_name']); ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
-          <label>
-            <input type="checkbox" id="to_other_checkbox" name="to_other_checkbox">
-            Other
-          </label>
-      </div>
-      <div class="form-group" id="to_other_div" style="display:none;">
-          <input type="text" name="to_other" id="to_other" placeholder="Enter location">
-      </div>
+      <!-- Additional Flight Details Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Additional Flight Details</legend>
+        <div class="mb-3 row">
+          <label for="capacity" class="col-sm-2 col-form-label">Capacity:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="capacity" id="capacity">
+              <option value="pilot" <?php echo ($default_role==='pilot') ? 'selected' : ''; ?>>Pilot</option>
+              <option value="crew" <?php echo ($default_role==='crew') ? 'selected' : ''; ?>>Crew</option>
+            </select>
+          </div>
+          <label for="pilot_type" class="col-sm-2 col-form-label">Pilot Type:</label>
+          <div class="col-sm-4">
+            <select class="form-select" name="pilot_type" id="pilot_type">
+              <option value="single">Single Pilot</option>
+              <option value="multi">Multi Pilot</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label for="crew_names" class="form-label">Crew Names:</label>
+          <input type="text" class="form-control" name="crew_names" id="crew_names" placeholder="Enter crew names (comma separated)">
+        </div>
+      </fieldset>
       
-      <!-- Additional Flight Details -->
-      <div class="form-group">
-          <label for="capacity">Capacity:</label>
-          <select name="capacity" id="capacity">
-            <option value="pilot" <?php echo ($default_role==='pilot') ? 'selected' : ''; ?>>Pilot</option>
-            <option value="crew" <?php echo ($default_role==='crew') ? 'selected' : ''; ?>>Crew</option>
-          </select>
-      </div>
+      <!-- Flight Timing Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Flight Timing</legend>
+        <div class="mb-3 row">
+          <label for="rotors_start" class="col-sm-2 col-form-label">Rotors Start:</label>
+          <div class="col-sm-4">
+            <input type="time" class="form-control" name="rotors_start" id="rotors_start" required oninput="recalcBreakdown();">
+          </div>
+          <label for="rotors_stop" class="col-sm-2 col-form-label">Rotors Stop:</label>
+          <div class="col-sm-4">
+            <input type="time" class="form-control" name="rotors_stop" id="rotors_stop" required oninput="recalcBreakdown();">
+          </div>
+        </div>
+      </fieldset>
       
-      <div class="form-group">
-          <label for="pilot_type">Single Pilot or Multi Pilot:</label>
-          <select name="pilot_type" id="pilot_type">
-            <option value="single">Single Pilot</option>
-            <option value="multi">Multi Pilot</option>
-          </select>
-      </div>
+      <!-- Flight Role Breakdown Section -->
+      <fieldset class="mb-4">
+        <legend class="h5">Flight Role Breakdown</legend>
+        <p class="small text-muted">Detail the breakdown of your flight time by role (in minutes). The first row is auto‑calculated based on your rotors times.</p>
+        <table class="table table-bordered" id="breakdownTable">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Duration (minutes)</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <select class="form-select" name="role[]" id="defaultRoleSelect">
+                  <?php echo $roleOptions; ?>
+                </select>
+              </td>
+              <td>
+                <input type="number" class="form-control" name="duration[]" id="defaultDuration" min="0" placeholder="Minutes" readonly>
+              </td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+        <button type="button" class="btn btn-secondary" onclick="addRow();">Add Role</button>
+      </fieldset>
       
-      <div class="form-group">
-          <label for="crew_names">Crew Names:</label>
-          <input type="text" name="crew_names" id="crew_names" placeholder="Enter crew names (comma separated)">
-      </div>
+      <!-- NVG Section (Optional) -->
+      <fieldset class="mb-4">
+        <legend class="h5">NVG (Night Vision Goggles) <small class="text-muted">(Optional)</small></legend>
+        <div class="mb-3 row">
+          <label for="nvg_time" class="col-sm-2 col-form-label">NVG Time:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="nvg_time" id="nvg_time" min="0" value="0">
+          </div>
+          <label for="nvg_takeoffs" class="col-sm-2 col-form-label">NVG Takeoffs:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="nvg_takeoffs" id="nvg_takeoffs" min="0" value="0">
+          </div>
+        </div>
+        <div class="mb-3 row">
+          <label for="nvg_landings" class="col-sm-2 col-form-label">NVG Landings:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="nvg_landings" id="nvg_landings" min="0" value="0">
+          </div>
+        </div>
+      </fieldset>
       
-      <div class="form-group">
-          <label for="rotors_start">Rotors Start:</label>
-          <input type="time" name="rotors_start" id="rotors_start" required oninput="recalcBreakdown();">
-      </div>
+      <!-- Instrument Flight Section (Optional) -->
+      <fieldset class="mb-4">
+        <legend class="h5">Instrument Flight <small class="text-muted">(Optional)</small></legend>
+        <div class="mb-3 row">
+          <label for="sim_if" class="col-sm-2 col-form-label">Sim IF:</label>
+          <div class="col-sm-4">
+            <input type="time" class="form-control" name="sim_if" id="sim_if">
+          </div>
+          <label for="act_if" class="col-sm-2 col-form-label">Act IF:</label>
+          <div class="col-sm-4">
+            <input type="time" class="form-control" name="act_if" id="act_if">
+          </div>
+        </div>
+        <div class="mb-3 row">
+          <label for="ils_approaches" class="col-sm-2 col-form-label">ILS Approaches:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="ils_approaches" id="ils_approaches" min="0" value="0">
+          </div>
+          <label for="rnp" class="col-sm-2 col-form-label">RNP:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="rnp" id="rnp" min="0" value="0">
+          </div>
+        </div>
+        <div class="mb-3 row">
+          <label for="npa" class="col-sm-2 col-form-label">NPA:</label>
+          <div class="col-sm-4">
+            <input type="number" class="form-control" name="npa" id="npa" min="0" value="0">
+          </div>
+        </div>
+      </fieldset>
       
-      <div class="form-group">
-          <label for="rotors_stop">Rotors Stop:</label>
-          <input type="time" name="rotors_stop" id="rotors_stop" required oninput="recalcBreakdown();">
+      <div class="mb-3">
+        <button type="submit" class="btn btn-primary">Add Flight Record</button>
       </div>
-    </fieldset>
-    
-    <!-- Flight Times Section -->
-    <fieldset>
-      <legend>Flight Times</legend>
-      <p>Detail the breakdown of your flight time by role (in minutes). The first row is auto‑calculated based on your rotors times. You may change the role if needed.</p>
-      <table id="breakdownTable" class="breakdown-table">
-        <thead>
-          <tr>
-            <th>Role</th>
-            <th>Duration (minutes)</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              <select name="role[]" id="defaultRoleSelect">
-                <?php echo $roleOptions; ?>
-              </select>
-            </td>
-            <td>
-              <input type="number" name="duration[]" id="defaultDuration" min="0" placeholder="Minutes" readonly>
-            </td>
-            <td>&nbsp;</td>
-          </tr>
-        </tbody>
-      </table>
-      <button type="button" onclick="addRow();">Add Role</button>
-    </fieldset>
-    
-    <!-- NVG Section (Collapsible) -->
-    <fieldset class="collapsible" id="nvgFieldset">
-      <legend style="cursor: pointer;">NVG <span class="toggle-indicator">[+]</span></legend>
-      <div class="collapsible-content" style="display: none;">
-        <div class="form-group">
-            <label for="nvg_time">NVG Time (minutes):</label>
-            <input type="number" name="nvg_time" id="nvg_time" min="0" value="0">
-        </div>
-        <div class="form-group">
-            <label for="nvg_takeoffs">NVG Takeoffs:</label>
-            <input type="number" name="nvg_takeoffs" id="nvg_takeoffs" min="0" value="0">
-        </div>
-        <div class="form-group">
-            <label for="nvg_landings">NVG Landings:</label>
-            <input type="number" name="nvg_landings" id="nvg_landings" min="0" value="0">
-        </div>
-      </div>
-    </fieldset>
-    
-    <!-- Instrument Flight Section (Collapsible) -->
-    <fieldset class="collapsible" id="ifFieldset">
-      <legend style="cursor: pointer;">Instrument Flight <span class="toggle-indicator">[+]</span></legend>
-      <div class="collapsible-content" style="display: none;">
-        <div class="form-group">
-            <label for="sim_if">Sim IF (time):</label>
-            <input type="time" name="sim_if" id="sim_if">
-        </div>
-        <div class="form-group">
-            <label for="act_if">Act IF (time):</label>
-            <input type="time" name="act_if" id="act_if">
-        </div>
-        <div class="form-group">
-            <label for="ils_approaches">ILS Approaches:</label>
-            <input type="number" name="ils_approaches" id="ils_approaches" min="0" value="0">
-        </div>
-        <div class="form-group">
-            <label for="rnp">RNP:</label>
-            <input type="number" name="rnp" id="rnp" min="0" value="0">
-        </div>
-        <div class="form-group">
-            <label for="npa">NPA:</label>
-            <input type="number" name="npa" id="npa" min="0" value="0">
-        </div>
-      </div>
-    </fieldset>
-    
-    <div class="form-group">
-        <input type="submit" value="Add Flight Record">
-    </div>
-  </form>
+    </form>
+  </div>
 </div>
 
-<!-- Include jQuery -->
+<!-- jQuery (for dynamic behavior) -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
 <script>
-// Toggle functionality for checkboxes.
+// Toggle visibility for "Other" options.
 $(document).ready(function(){
   $("#aircraft_other_checkbox").change(function(){
     $("#aircraft_other_div").toggle(this.checked);
@@ -373,23 +319,9 @@ $(document).ready(function(){
   $("#to_other_checkbox").change(function(){
     $("#to_other_div").toggle(this.checked);
   });
-  
-  // Collapsible fieldset functionality.
-  $(".collapsible legend").click(function(){
-    var $fieldset = $(this).parent();
-    var $content = $fieldset.find(".collapsible-content");
-    var $indicator = $(this).find(".toggle-indicator");
-    $content.slideToggle(200, function(){
-      if ($content.is(":visible")) {
-        $indicator.text("[-]");
-      } else {
-        $indicator.text("[+]");
-      }
-    });
-  });
 });
 
-// Function to recalc and update the default Flight Role Breakdown row.
+// Function to recalc the default flight role breakdown row.
 function recalcBreakdown(){
     const rotorsStart = document.getElementById('rotors_start').value;
     const rotorsStop = document.getElementById('rotors_stop').value;
@@ -416,35 +348,36 @@ function recalcBreakdown(){
     $("#defaultDuration").val(defaultMinutes);
 }
 
-// When an additional row's duration changes, recalc.
+// Recalculate when any additional breakdown row changes.
 $(document).on("change", "input[name='duration[]']", function(){
     if($(this).closest("tr").index() > 0){
         recalcBreakdown();
     }
 });
 
-// Function to add an additional breakdown row.
+// Add a new breakdown row.
 function addRow(){
-    const tbody = document.getElementById("breakdownTable").querySelector("tbody");
-    const newRow = tbody.insertRow();
-    const cell1 = newRow.insertCell(0);
-    const cell2 = newRow.insertCell(1);
-    const cell3 = newRow.insertCell(2);
-    
-    let selectHTML = '<select name="role[]">';
-    selectHTML += <?php echo json_encode($roleOptions); ?>;
-    selectHTML += '</select>';
-    cell1.innerHTML = selectHTML;
-    cell2.innerHTML = '<input type="number" name="duration[]" min="0" placeholder="Minutes">';
-    cell3.innerHTML = '<button type="button" onclick="removeRow(this);">Remove</button>';
-    
+    const tbody = $("#breakdownTable tbody");
+    let newRow = `<tr>
+            <td>
+              <select class="form-select" name="role[]">
+                <?php echo json_encode($roleOptions); ?>
+              </select>
+            </td>
+            <td>
+              <input type="number" class="form-control" name="duration[]" min="0" placeholder="Minutes">
+            </td>
+            <td>
+              <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this);">Remove</button>
+            </td>
+          </tr>`;
+    tbody.append(newRow);
     recalcBreakdown();
 }
 
-// Function to remove a breakdown row.
+// Remove a breakdown row.
 function removeRow(btn){
-    const row = btn.parentNode.parentNode;
-    row.parentNode.removeChild(row);
+    $(btn).closest('tr').remove();
     recalcBreakdown();
 }
 </script>

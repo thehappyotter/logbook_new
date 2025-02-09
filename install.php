@@ -1,8 +1,7 @@
 <?php
 // install.php - Flight Log Installer
 if (file_exists('installed.lock')) {
-    echo "<h2>Installation Already Completed</h2>";
-    echo "<p>The system appears to be already installed. To reinstall, please remove the 'installed.lock' file.</p>";
+    echo "<div class='container my-4'><div class='alert alert-info'><h2>Installation Already Completed</h2><p>The system appears to be already installed. To reinstall, please remove the 'installed.lock' file.</p></div></div>";
     exit;
 }
 
@@ -47,57 +46,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $config_content .= "}\n";
         file_put_contents('db.php', $config_content);
         file_put_contents('installed.lock', 'Installed on ' . date('Y-m-d H:i:s'));
-        echo "<h2>Installation Successful</h2>";
-        echo "<p>The Flight Log website has been installed successfully.</p>";
-        echo "<p><strong>Important:</strong> For security, please remove or rename the <code>install.php</code> file.</p>";
+        echo "<div class='container my-4'><div class='alert alert-success'><h2>Installation Successful</h2><p>The Flight Log website has been installed successfully.</p><p><strong>Important:</strong> For security, please remove or rename the <code>install.php</code> file.</p></div></div>";
     } catch (PDOException $e) {
-        echo "<h2>Installation Error</h2>";
-        echo "<p>Error: " . htmlspecialchars($e->getMessage()) . "</p>";
+        echo "<div class='container my-4'><div class='alert alert-danger'><h2>Installation Error</h2><p>Error: " . htmlspecialchars($e->getMessage()) . "</p></div></div>";
     }
 } else {
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <title>Flight Log Installer</title>
-      <style>
-        body { font-family: Arial, sans-serif; background: #f5f5f5; }
-        .container { max-width: 600px; margin: 50px auto; padding: 20px; background: #fff; border: 1px solid #ccc; border-radius: 5px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-top: 10px; }
-        input[type="text"], input[type="password"] { width: 100%; padding: 8px; box-sizing: border-box; }
-        input[type="submit"] { margin-top: 15px; padding: 10px 20px; background: #003366; color: #ffcc00; border: none; cursor: pointer; }
-      </style>
-    </head>
-    <body>
-      <div class="container">
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Flight Log Installer</title>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <div class="container my-4">
+    <div class="card">
+      <div class="card-header">
         <h2>Flight Log Installer</h2>
-        <p>Please enter your database credentials below. (Make sure the MySQL user has sufficient privileges.)</p>
+      </div>
+      <div class="card-body">
+        <p>Please enter your database credentials below. (Ensure the MySQL user has sufficient privileges.)</p>
         <form method="post" action="install.php">
-          <div class="form-group">
-            <label for="db_host">Database Host:</label>
-            <input type="text" name="db_host" id="db_host" value="localhost" required>
+          <div class="mb-3">
+            <label for="db_host" class="form-label">Database Host:</label>
+            <input type="text" class="form-control" name="db_host" id="db_host" value="localhost" required>
           </div>
-          <div class="form-group">
-            <label for="db_username">Database Username:</label>
-            <input type="text" name="db_username" id="db_username" required>
+          <div class="mb-3">
+            <label for="db_username" class="form-label">Database Username:</label>
+            <input type="text" class="form-control" name="db_username" id="db_username" required>
           </div>
-          <div class="form-group">
-            <label for="db_password">Database Password:</label>
-            <input type="password" name="db_password" id="db_password" required>
+          <div class="mb-3">
+            <label for="db_password" class="form-label">Database Password:</label>
+            <input type="password" class="form-control" name="db_password" id="db_password" required>
           </div>
-          <div class="form-group">
-            <label for="db_name">Database Name:</label>
-            <input type="text" name="db_name" id="db_name" value="flightlog" required>
+          <div class="mb-3">
+            <label for="db_name" class="form-label">Database Name:</label>
+            <input type="text" class="form-control" name="db_name" id="db_name" value="flightlog" required>
           </div>
-          <div class="form-group">
-            <input type="submit" value="Install">
-          </div>
+          <button type="submit" class="btn btn-primary">Install</button>
         </form>
       </div>
-    </body>
-    </html>
-    <?php
+    </div>
+  </div>
+  <!-- Bootstrap JS Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+<?php
 }
 ?>

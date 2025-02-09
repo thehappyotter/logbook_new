@@ -2,6 +2,7 @@
 // account.php
 session_start();
 require_once('db.php');
+require_once('functions.php');
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
@@ -50,37 +51,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 include('header.php');
 ?>
-<div class="flight-entry-container">
-  <h2>My Account</h2>
-  <?php 
-    if (!empty($updateError)) {
-      echo "<p class='error'>" . htmlspecialchars($updateError) . "</p>";
-    }
-    if (!empty($updateSuccess)) {
-      echo "<p class='success'>" . htmlspecialchars($updateSuccess) . "</p>";
-    }
-  ?>
-  <form method="post" action="account.php">
-    <div class="form-group">
-      <label for="default_role">Default Role:</label>
-      <select name="default_role" id="default_role">
-        <option value="pilot" <?php echo ($user['default_role'] === 'pilot') ? 'selected' : ''; ?>>Pilot</option>
-        <option value="crew" <?php echo ($user['default_role'] === 'crew') ? 'selected' : ''; ?>>Crew</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label for="default_base">Default Base:</label>
-      <select name="default_base" id="default_base">
-        <?php foreach ($bases as $base): ?>
-          <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php echo ($base['id'] == $user['default_base']) ? 'selected' : ''; ?>>
-            <?php echo htmlspecialchars($base['base_name']); ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <div class="form-group">
-      <input type="submit" value="Update Account">
-    </div>
-  </form>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">My Account</h2>
+  </div>
+  <div class="card-body">
+    <?php 
+      if (!empty($updateError)) {
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($updateError) . "</div>";
+      }
+      if (!empty($updateSuccess)) {
+          echo "<div class='alert alert-success'>" . htmlspecialchars($updateSuccess) . "</div>";
+      }
+    ?>
+    <form method="post" action="account.php">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(getCSRFToken()); ?>">
+      <div class="mb-3">
+        <label for="default_role" class="form-label">Default Role:</label>
+        <select name="default_role" id="default_role" class="form-select">
+          <option value="pilot" <?php echo ($user['default_role'] === 'pilot') ? 'selected' : ''; ?>>Pilot</option>
+          <option value="crew" <?php echo ($user['default_role'] === 'crew') ? 'selected' : ''; ?>>Crew</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label for="default_base" class="form-label">Default Base:</label>
+        <select name="default_base" id="default_base" class="form-select">
+          <?php foreach ($bases as $base): ?>
+            <option value="<?php echo htmlspecialchars($base['id']); ?>" <?php echo ($base['id'] == $user['default_base']) ? 'selected' : ''; ?>>
+              <?php echo htmlspecialchars($base['base_name']); ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary">Update Account</button>
+    </form>
+  </div>
 </div>
 <?php include('footer.php'); ?>

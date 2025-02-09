@@ -69,113 +69,104 @@ $csrf_token = getCSRFToken();
 
 include('header.php');
 ?>
-<div class="flight-entry-container">
-  <h2>Search Flight Records</h2>
-  <form method="get" action="search.php">
-    <div class="form-group">
-      <label for="search">Search (Flight From, Flight To, or Aircraft Registration):</label>
-      <input type="text" name="search" id="search" value="<?php echo htmlspecialchars($searchQuery); ?>">
-    </div>
-    <div class="form-group">
-      <label for="start_date">Start Date:</label>
-      <input type="date" name="start_date" id="start_date" value="<?php echo htmlspecialchars($start_date); ?>">
-    </div>
-    <div class="form-group">
-      <label for="end_date">End Date:</label>
-      <input type="date" name="end_date" id="end_date" value="<?php echo htmlspecialchars($end_date); ?>">
-    </div>
-    <div class="form-group">
-      <input type="submit" value="Search">
-    </div>
-  </form>
-  <?php
-  if ($flights) {
-      echo "<table>";
-      echo "<thead><tr>
-              <th>Date</th>
-              <th>Aircraft</th>
-              <th>From</th>
-              <th>To</th>
-              <th>Duration</th>
-              <th>NVG Time</th>
-              <th>NVG Takeoffs</th>
-              <th>NVG Landings</th>
-              <th>Sim IF</th>
-              <th>Act IF</th>
-              <th>ILS Approaches</th>
-              <th>RNP</th>
-              <th>NPA</th>
-              <th>Actions</th>
-            </tr></thead><tbody>";
-      foreach ($flights as $flight) {
-          echo "<tr>";
-          echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
-          if ($flight['aircraft_id'] !== null) {
-              $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
-              $stmt2->execute([$flight['aircraft_id']]);
-              $aircraft = $stmt2->fetch(PDO::FETCH_ASSOC);
-              $aircraft_reg = ($aircraft !== false && isset($aircraft['registration'])) ? $aircraft['registration'] : 'Unknown';
-              echo "<td>" . htmlspecialchars($aircraft_reg) . "</td>";
-          } else {
-              echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
-          }
-          $from = $flight['flight_from'];
-          if (is_numeric($from)) {
-              $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
-              $stmtFrom->execute([$from]);
-              $baseData = $stmtFrom->fetch();
-              if ($baseData) {
-                  $from = $baseData['base_name'];
-              }
-          }
-          echo "<td>" . htmlspecialchars($from) . "</td>";
-          $to = $flight['flight_to'];
-          if (is_numeric($to)) {
-              $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
-              $stmtTo->execute([$to]);
-              $baseData = $stmtTo->fetch();
-              if ($baseData) {
-                  $to = $baseData['base_name'];
-              }
-          }
-          echo "<td>" . htmlspecialchars($to) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['nvg_time']) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['nvg_takeoffs']) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['nvg_landings']) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['sim_if']) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['act_if']) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['ils_approaches']) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['rnp']) . "</td>";
-          echo "<td>" . htmlspecialchars($flight['npa']) . "</td>";
-          echo "<td>";
-          echo "<a href='flight_view.php?id=" . htmlspecialchars($flight['id']) . "'>View Full Flight Data</a> | ";
-          echo "<a href='flight_edit.php?id=" . htmlspecialchars($flight['id']) . "'>Edit</a> | ";
-          // Use a POST form for deletion with CSRF protection.
-          echo "<form method='post' action='flight_delete.php' style='display:inline-block; vertical-align: middle;' onsubmit='return confirm(\"Are you sure?\");'>";
-          echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars($csrf_token) . "'>";
-          echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
-          echo "<button type='submit' class='btn'>Delete</button>";
-          echo "</form>";
-          echo "</td>";
-          echo "</tr>";
-      }
-      echo "</tbody></table>";
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Search Flight Records</h2>
+  </div>
+  <div class="card-body">
+    <form method="get" action="search.php" class="mb-4">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label for="search" class="form-label">Search (From, To, Aircraft):</label>
+          <input type="text" class="form-control" name="search" id="search" value="<?php echo htmlspecialchars($searchQuery); ?>">
+        </div>
+        <div class="col-md-4">
+          <label for="start_date" class="form-label">Start Date:</label>
+          <input type="date" class="form-control" name="start_date" id="start_date" value="<?php echo htmlspecialchars($start_date); ?>">
+        </div>
+        <div class="col-md-4">
+          <label for="end_date" class="form-label">End Date:</label>
+          <input type="date" class="form-control" name="end_date" id="end_date" value="<?php echo htmlspecialchars($end_date); ?>">
+        </div>
+      </div>
+      <div class="mt-3">
+        <button type="submit" class="btn btn-primary">Search</button>
+      </div>
+    </form>
+    <?php
+    if ($flights) {
+        echo "<table class='table table-striped'>";
+        echo "<thead><tr>
+                <th>Date</th>
+                <th>Aircraft</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Duration</th>
+                <th>Actions</th>
+              </tr></thead><tbody>";
+        foreach ($flights as $flight) {
+            echo "<tr>";
+            echo "<td>" . htmlspecialchars($flight['flight_date']) . "</td>";
+            if ($flight['aircraft_id'] !== null) {
+                $stmt2 = $pdo->prepare("SELECT registration FROM aircraft WHERE id = ?");
+                $stmt2->execute([$flight['aircraft_id']]);
+                $aircraft = $stmt2->fetch(PDO::FETCH_ASSOC);
+                $aircraft_reg = ($aircraft !== false && isset($aircraft['registration'])) ? $aircraft['registration'] : 'Unknown';
+                echo "<td>" . htmlspecialchars($aircraft_reg) . "</td>";
+            } else {
+                echo "<td>" . htmlspecialchars($flight['custom_aircraft_details']) . "</td>";
+            }
+            $from = $flight['flight_from'];
+            if (is_numeric($from)) {
+                $stmtFrom = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                $stmtFrom->execute([$from]);
+                $baseData = $stmtFrom->fetch();
+                if ($baseData) {
+                    $from = $baseData['base_name'];
+                }
+            }
+            echo "<td>" . htmlspecialchars($from) . "</td>";
+            $to = $flight['flight_to'];
+            if (is_numeric($to)) {
+                $stmtTo = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
+                $stmtTo->execute([$to]);
+                $baseData = $stmtTo->fetch();
+                if ($baseData) {
+                    $to = $baseData['base_name'];
+                }
+            }
+            echo "<td>" . htmlspecialchars($to) . "</td>";
+            echo "<td>" . htmlspecialchars($flight['flight_duration']) . "</td>";
+            echo "<td>";
+            echo "<a class='btn btn-sm btn-secondary' href='flight_view.php?id=" . htmlspecialchars($flight['id']) . "'>View</a> ";
+            echo "<a class='btn btn-sm btn-warning' href='flight_edit.php?id=" . htmlspecialchars($flight['id']) . "'>Edit</a> ";
+            echo "<form method='post' action='flight_delete.php' class='d-inline' onsubmit='return confirm(\"Are you sure?\");'>";
+            echo "<input type='hidden' name='csrf_token' value='" . htmlspecialchars($csrf_token) . "'>";
+            echo "<input type='hidden' name='id' value='" . htmlspecialchars($flight['id']) . "'>";
+            echo "<button type='submit' class='btn btn-sm btn-danger'>Delete</button>";
+            echo "</form>";
+            echo "</td>";
+            echo "</tr>";
+        }
+        echo "</tbody></table>";
       
-      $totalPages = ceil($totalResults / $perPage);
-      for ($i = 1; $i <= $totalPages; $i++) {
-          if ($i == $page) {
-              echo "<strong>$i</strong> ";
-          } else {
-              $queryParams = $_GET;
-              $queryParams['page'] = $i;
-              $queryString = http_build_query($queryParams);
-              echo "<a href='search.php?$queryString'>$i</a> ";
-          }
-      }
-  } else {
-      echo "<p>No flight records found.</p>";
-  }
-  ?>
+        $totalPages = ceil($totalResults / $perPage);
+        echo "<nav><ul class='pagination'>";
+        for ($i = 1; $i <= $totalPages; $i++) {
+            if ($i == $page) {
+                echo "<li class='page-item active'><span class='page-link'>$i</span></li>";
+            } else {
+                $queryParams = $_GET;
+                $queryParams['page'] = $i;
+                $queryString = http_build_query($queryParams);
+                echo "<li class='page-item'><a class='page-link' href='search.php?$queryString'>$i</a></li>";
+            }
+        }
+        echo "</ul></nav>";
+    } else {
+        echo "<p>No flight records found.</p>";
+    }
+    ?>
+  </div>
 </div>
 <?php include('footer.php'); ?>

@@ -42,26 +42,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 include('header.php');
 ?>
-<div class="flight-entry-container">
-  <h2>Reset Password</h2>
-  <?php
-    foreach ($error as $msg) {
-        echo "<p class='error'>" . htmlspecialchars($msg) . "</p>";
-    }
-    if ($message) {
-        echo "<p class='success'>" . $message . "</p>";
-    } else {
-  ?>
-  <form method="post" action="reset_password.php?token=<?php echo htmlspecialchars($token); ?>">
-    <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
-    <div class="form-group">
-      <label for="password">New Password:</label>
-      <input type="password" name="password" id="password" required>
-    </div>
-    <div class="form-group">
-      <input type="submit" value="Reset Password">
-    </div>
-  </form>
-  <?php } ?>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Reset Password</h2>
+  </div>
+  <div class="card-body">
+    <?php
+      foreach ($error as $msg) {
+          echo "<div class='alert alert-danger'>" . htmlspecialchars($msg) . "</div>";
+      }
+      if ($message) {
+          echo "<div class='alert alert-success'>" . $message . "</div>";
+      } else {
+    ?>
+    <form method="post" action="reset_password.php?token=<?php echo htmlspecialchars($token); ?>">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrf_token); ?>">
+      <div class="mb-3">
+        <label for="password" class="form-label">New Password:</label>
+        <input type="password" class="form-control" name="password" id="password" required>
+      </div>
+      <button type="submit" class="btn btn-primary">Reset Password</button>
+    </form>
+    <?php } ?>
+  </div>
 </div>
 <?php include('footer.php'); ?>

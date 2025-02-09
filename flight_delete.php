@@ -37,11 +37,11 @@ if ($flight['user_id'] != $_SESSION['user_id'] && $_SESSION['role'] != 'admin') 
     die("Unauthorized access.");
 }
 
-// First, delete any associated flight breakdown records.
+// Delete any associated flight breakdown records.
 $stmtBreakdown = $pdo->prepare("DELETE FROM flight_breakdown WHERE flight_id = ?");
 $stmtBreakdown->execute([$flight_id]);
 
-// Now delete the flight record.
+// Delete the flight record.
 $stmt = $pdo->prepare("DELETE FROM flights WHERE id = ?");
 if ($stmt->execute([$flight_id])) {
     // Log the deletion.

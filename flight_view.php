@@ -42,8 +42,8 @@ if ($flight['aircraft_id'] !== null) {
     $aircraftInfo = htmlspecialchars($flight['custom_aircraft_details']);
 }
 
-// Function to get base name.
-function getBaseName($pdo, $value) {
+// Helper to get base name.
+function getBaseNameDisplay($pdo, $value) {
     if (is_numeric($value)) {
         $stmtB = $pdo->prepare("SELECT base_name FROM bases WHERE id = ?");
         $stmtB->execute([$value]);
@@ -55,8 +55,8 @@ function getBaseName($pdo, $value) {
     return htmlspecialchars($value);
 }
 
-$fromName = getBaseName($pdo, $flight['flight_from']);
-$toName   = getBaseName($pdo, $flight['flight_to']);
+$fromName = getBaseNameDisplay($pdo, $flight['flight_from']);
+$toName   = getBaseNameDisplay($pdo, $flight['flight_to']);
 
 // Retrieve flight breakdown details.
 $stmtBreakdown = $pdo->prepare("SELECT role, duration_minutes FROM flight_breakdown WHERE flight_id = ?");
@@ -65,122 +65,119 @@ $breakdowns = $stmtBreakdown->fetchAll();
 
 include('header.php');
 ?>
-<div class="flight-view-container">
-  <h2>Full Flight Data</h2>
-  <div style="margin-bottom:15px;">
-    <a class="btn" href="flight_view_pdf.php?id=<?php echo htmlspecialchars($flight_id); ?>">Download PDF</a>
+<div class="card flight-entry-container">
+  <div class="card-header">
+    <h2 class="mb-0">Flight Details</h2>
   </div>
-  
-  <!-- Flight Details Section -->
-  <h3>Flight Details</h3>
-  <table>
-    <tr>
-      <th>Date</th>
-      <td><?php echo htmlspecialchars($flight['flight_date']); ?></td>
-    </tr>
-    <tr>
-      <th>Aircraft</th>
-      <td><?php echo $aircraftInfo; ?></td>
-    </tr>
-    <tr>
-      <th>From</th>
-      <td><?php echo $fromName; ?></td>
-    </tr>
-    <tr>
-      <th>To</th>
-      <td><?php echo $toName; ?></td>
-    </tr>
-    <tr>
-      <th>Capacity</th>
-      <td><?php echo htmlspecialchars($flight['capacity']); ?></td>
-    </tr>
-    <tr>
-      <th>Pilot Type</th>
-      <td><?php echo htmlspecialchars($flight['pilot_type']); ?></td>
-    </tr>
-    <tr>
-      <th>Crew Names</th>
-      <td><?php echo htmlspecialchars($flight['crew_names']); ?></td>
-    </tr>
-    <tr>
-      <th>Rotors Start</th>
-      <td><?php echo htmlspecialchars($flight['rotors_start']); ?></td>
-    </tr>
-    <tr>
-      <th>Rotors Stop</th>
-      <td><?php echo htmlspecialchars($flight['rotors_stop']); ?></td>
-    </tr>
-    <tr>
-      <th>Flight Duration</th>
-      <td><?php echo htmlspecialchars($flight['flight_duration']); ?></td>
-    </tr>
-  </table>
-  
-  <!-- Flight Role Breakdown Section -->
-  <h3>Flight Role Breakdown</h3>
-  <?php if ($breakdowns): ?>
-  <table>
-    <thead>
+  <div class="card-body">
+    <div class="mb-3">
+      <a class="btn btn-secondary" href="flight_view_pdf.php?id=<?php echo htmlspecialchars($flight_id); ?>" target="_blank">Download PDF</a>
+    </div>
+    <h4>Flight Information</h4>
+    <table class="table table-striped">
       <tr>
-        <th>Role</th>
-        <th>Duration (minutes)</th>
+        <th>Date</th>
+        <td><?php echo htmlspecialchars($flight['flight_date']); ?></td>
       </tr>
-    </thead>
-    <tbody>
-      <?php foreach ($breakdowns as $bd): ?>
       <tr>
-        <td><?php echo htmlspecialchars($bd['role']); ?></td>
-        <td><?php echo htmlspecialchars($bd['duration_minutes']); ?></td>
+        <th>Aircraft</th>
+        <td><?php echo $aircraftInfo; ?></td>
       </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
-  <?php else: ?>
-    <p>No breakdown details available.</p>
-  <?php endif; ?>
-  
-  <!-- NVG Section -->
-  <h3>NVG</h3>
-  <table>
-    <tr>
-      <th>NVG Time (minutes)</th>
-      <td><?php echo htmlspecialchars($flight['nvg_time']); ?></td>
-    </tr>
-    <tr>
-      <th>NVG Takeoffs</th>
-      <td><?php echo htmlspecialchars($flight['nvg_takeoffs']); ?></td>
-    </tr>
-    <tr>
-      <th>NVG Landings</th>
-      <td><?php echo htmlspecialchars($flight['nvg_landings']); ?></td>
-    </tr>
-  </table>
-  
-  <!-- Instrument Flight Section -->
-  <h3>Instrument Flight</h3>
-  <table>
-    <tr>
-      <th>Sim IF</th>
-      <td><?php echo htmlspecialchars($flight['sim_if']); ?></td>
-    </tr>
-    <tr>
-      <th>Act IF</th>
-      <td><?php echo htmlspecialchars($flight['act_if']); ?></td>
-    </tr>
-    <tr>
-      <th>ILS Approaches</th>
-      <td><?php echo htmlspecialchars($flight['ils_approaches']); ?></td>
-    </tr>
-    <tr>
-      <th>RNP</th>
-      <td><?php echo htmlspecialchars($flight['rnp']); ?></td>
-    </tr>
-    <tr>
-      <th>NPA</th>
-      <td><?php echo htmlspecialchars($flight['npa']); ?></td>
-    </tr>
-  </table>
-  
-  <p><a class="btn" href="index.php">Back to Flight Log</a></p>
+      <tr>
+        <th>From</th>
+        <td><?php echo $fromName; ?></td>
+      </tr>
+      <tr>
+        <th>To</th>
+        <td><?php echo $toName; ?></td>
+      </tr>
+      <tr>
+        <th>Capacity</th>
+        <td><?php echo htmlspecialchars($flight['capacity']); ?></td>
+      </tr>
+      <tr>
+        <th>Pilot Type</th>
+        <td><?php echo htmlspecialchars($flight['pilot_type']); ?></td>
+      </tr>
+      <tr>
+        <th>Crew Names</th>
+        <td><?php echo htmlspecialchars($flight['crew_names']); ?></td>
+      </tr>
+      <tr>
+        <th>Rotors Start</th>
+        <td><?php echo htmlspecialchars($flight['rotors_start']); ?></td>
+      </tr>
+      <tr>
+        <th>Rotors Stop</th>
+        <td><?php echo htmlspecialchars($flight['rotors_stop']); ?></td>
+      </tr>
+      <tr>
+        <th>Flight Duration</th>
+        <td><?php echo htmlspecialchars($flight['flight_duration']); ?></td>
+      </tr>
+    </table>
+    <h4>Flight Role Breakdown</h4>
+    <?php if ($breakdowns): ?>
+      <table class="table table-bordered">
+        <thead>
+          <tr>
+            <th>Role</th>
+            <th>Duration (minutes)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($breakdowns as $bd): ?>
+          <tr>
+            <td><?php echo htmlspecialchars($bd['role']); ?></td>
+            <td><?php echo htmlspecialchars($bd['duration_minutes']); ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    <?php else: ?>
+      <p>No breakdown details available.</p>
+    <?php endif; ?>
+    
+    <h4>NVG</h4>
+    <table class="table table-bordered">
+      <tr>
+        <th>NVG Time (minutes)</th>
+        <td><?php echo htmlspecialchars($flight['nvg_time']); ?></td>
+      </tr>
+      <tr>
+        <th>NVG Takeoffs</th>
+        <td><?php echo htmlspecialchars($flight['nvg_takeoffs']); ?></td>
+      </tr>
+      <tr>
+        <th>NVG Landings</th>
+        <td><?php echo htmlspecialchars($flight['nvg_landings']); ?></td>
+      </tr>
+    </table>
+    
+    <h4>Instrument Flight</h4>
+    <table class="table table-bordered">
+      <tr>
+        <th>Sim IF</th>
+        <td><?php echo htmlspecialchars($flight['sim_if']); ?></td>
+      </tr>
+      <tr>
+        <th>Act IF</th>
+        <td><?php echo htmlspecialchars($flight['act_if']); ?></td>
+      </tr>
+      <tr>
+        <th>ILS Approaches</th>
+        <td><?php echo htmlspecialchars($flight['ils_approaches']); ?></td>
+      </tr>
+      <tr>
+        <th>RNP</th>
+        <td><?php echo htmlspecialchars($flight['rnp']); ?></td>
+      </tr>
+      <tr>
+        <th>NPA</th>
+        <td><?php echo htmlspecialchars($flight['npa']); ?></td>
+      </tr>
+    </table>
+    <a class="btn btn-primary" href="index.php">Back to Flight Log</a>
+  </div>
 </div>
 <?php include('footer.php'); ?>
